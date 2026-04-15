@@ -42,3 +42,6 @@ alembic/versions/__pycache__/
 
 # Superpowers brainstorm artifacts
 .superpowers/
+
+# Downloaded deb packages (local dev tooling)
+*.deb
