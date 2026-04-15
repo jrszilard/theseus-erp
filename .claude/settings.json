@@ -1,0 +1,30 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/justin/lakeshore-studio/knowledge-base/scripts/check-kb-session.sh",
+            "timeout": 10,
+            "statusMessage": "Checking knowledge base..."
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/justin/lakeshore-studio/knowledge-base/scripts/generate-session-stub.sh",
+            "timeout": 10,
+            "statusMessage": "Capturing session data..."
+          }
+        ]
+      }
+    ]
+  }
+}
