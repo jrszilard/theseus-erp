@@ -10,9 +10,9 @@ from theseus.database import Base
 
 # Import all models so Alembic sees them for autogenerate.
 # Add new model imports here as subsystems are built.
-# import theseus.keel.event_store.models  # noqa: F401  -- uncomment in Task 6
-# import theseus.keel.knowledge_graph.models  # noqa: F401  -- uncomment in Task 7
-# import theseus.keel.auth.models  # noqa: F401  -- uncomment in Task 8
+import theseus.keel.event_store.models  # noqa: F401
+import theseus.keel.knowledge_graph.models  # noqa: F401
+import theseus.keel.auth.models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)
