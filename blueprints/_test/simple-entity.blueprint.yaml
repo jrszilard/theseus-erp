@@ -1,0 +1,18 @@
+plank: test
+entity: Widget
+version: 1
+description: A simple test widget
+
+fields:
+  name:
+    type: string
+    required: true
+  color:
+    type: enum
+    values: [red, green, blue]
+  weight:
+    type: decimal
+    default: 0
+  is_active:
+    type: boolean
+    default: true

@@ -1,0 +1,29 @@
+plank: test
+entity: WidgetOrder
+version: 1
+description: An order for widgets
+
+fields:
+  order_number:
+    type: string
+    required: true
+    unique: true
+  quantity:
+    type: integer
+    required: true
+  notes:
+    type: text
+
+relations:
+  widget:
+    type: many_to_one
+    target: test.Widget
+  customer:
+    type: many_to_one
+    target: contacts.Contact
+
+behaviors:
+  on_quantity_zero:
+    trigger: "quantity == 0"
+    action: emit_event
+    event: OrderCancelled
