@@ -1,0 +1,25 @@
+plank: inventory
+entity: StockItem
+version: 1
+description: A trackable item in inventory
+
+fields:
+  sku:
+    type: string
+    required: true
+    unique: true
+  name:
+    type: string
+    required: true
+  category:
+    type: enum
+    values: [raw_material, component, finished_good, consumable]
+  unit_of_measure:
+    type: string
+    default: "each"
+  reorder_point:
+    type: decimal
+    default: 0
+  is_active:
+    type: boolean
+    default: true

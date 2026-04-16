@@ -1,0 +1,25 @@
+plank: inventory
+entity: StockMovement
+version: 1
+description: A record of stock entering or leaving inventory
+
+fields:
+  movement_type:
+    type: enum
+    values: [received, shipped, adjusted, transferred]
+    required: true
+  quantity:
+    type: decimal
+    required: true
+  reference:
+    type: string
+  notes:
+    type: text
+
+relations:
+  stock_item:
+    type: many_to_one
+    target: inventory.StockItem
+  warehouse:
+    type: many_to_one
+    target: inventory.Warehouse

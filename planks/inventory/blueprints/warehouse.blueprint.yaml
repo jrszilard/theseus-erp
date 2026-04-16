@@ -1,0 +1,19 @@
+plank: inventory
+entity: Warehouse
+version: 1
+description: A physical storage location
+
+fields:
+  name:
+    type: string
+    required: true
+    unique: true
+  code:
+    type: string
+    required: true
+    unique: true
+  address:
+    type: text
+  is_active:
+    type: boolean
+    default: true
