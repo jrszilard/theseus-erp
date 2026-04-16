@@ -1,0 +1,25 @@
+plank: invoicing
+entity: Payment
+version: 1
+description: A payment received against an invoice
+
+fields:
+  amount:
+    type: decimal
+    required: true
+  payment_date:
+    type: date
+    required: true
+  payment_method:
+    type: enum
+    values: [cash, check, bank_transfer, credit_card, other]
+    required: true
+  reference:
+    type: string
+  notes:
+    type: text
+
+relations:
+  invoice:
+    type: many_to_one
+    target: invoicing.Invoice

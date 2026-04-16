@@ -1,0 +1,26 @@
+plank: invoicing
+entity: InvoiceLine
+version: 1
+description: A line item on an invoice
+
+fields:
+  description:
+    type: string
+    required: true
+  quantity:
+    type: decimal
+    required: true
+  unit_price:
+    type: decimal
+    required: true
+  line_total:
+    type: decimal
+    default: 0
+
+relations:
+  invoice:
+    type: many_to_one
+    target: invoicing.Invoice
+  product:
+    type: many_to_one
+    target: inventory.StockItem

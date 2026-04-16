@@ -1,0 +1,38 @@
+plank: invoicing
+entity: Invoice
+version: 1
+description: A sales invoice sent to a customer
+
+fields:
+  invoice_number:
+    type: string
+    required: true
+    unique: true
+  status:
+    type: enum
+    values: [draft, sent, paid, overdue, cancelled]
+    required: true
+  issue_date:
+    type: date
+    required: true
+  due_date:
+    type: date
+  subtotal:
+    type: decimal
+    default: 0
+  tax_rate:
+    type: decimal
+    default: 0
+  tax_amount:
+    type: decimal
+    default: 0
+  total:
+    type: decimal
+    default: 0
+  notes:
+    type: text
+
+relations:
+  customer:
+    type: many_to_one
+    target: contacts.Contact
