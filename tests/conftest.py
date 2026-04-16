@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import (
 
 from theseus.api.dependencies import set_registry
 from theseus.database import Base, get_session
+import theseus.shipwright.conversation.models  # noqa: F401
 from theseus.keel.blueprint_engine.parser import BlueprintFileParser
 from theseus.keel.blueprint_engine.registry import BlueprintRegistry
 from theseus.keel.schema_engine.generator import SchemaGenerator
