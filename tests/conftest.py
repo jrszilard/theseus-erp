@@ -20,6 +20,7 @@ from theseus.main import create_app
 
 TEST_DATABASE_URL = "postgresql+asyncpg://theseus:theseus@localhost:5432/theseus_test"
 FIXTURES_DIR = Path(__file__).parent.parent / "blueprints" / "_test"
+PLANKS_DIR = Path(__file__).parent.parent / "planks"
 # Only the simple fixture — related-entities.blueprint.yaml has cross-plank FKs
 # (contacts.Contact) that are not present in the test schema.
 SIMPLE_FIXTURE = FIXTURES_DIR / "simple-entity.blueprint.yaml"
@@ -33,11 +34,28 @@ async def test_engine():
 
     parser = BlueprintFileParser()
     generator = SchemaGenerator()
+
+    # Register the simple test fixture
     if SIMPLE_FIXTURE.exists():
         bp = parser.parse_file(SIMPLE_FIXTURE)
         generator.generate_table(bp)
-        async with eng.begin() as conn:
-            await conn.run_sync(generator._metadata.create_all, checkfirst=True)
+
+    # Register all Plank Blueprints in sorted order (contacts < inventory < invoicing)
+    # so FK target tables are in the metadata before tables that reference them.
+    # All tables are registered first, then create_all is called once at the end.
+    if PLANKS_DIR.exists():
+        for plank_dir in sorted(PLANKS_DIR.iterdir()):
+            bp_dir = plank_dir / "blueprints"
+            if bp_dir.is_dir():
+                # Within each plank, sort blueprints so parent tables come before children
+                # (e.g. contact.blueprint.yaml before address.blueprint.yaml)
+                for bp_file in sorted(bp_dir.glob("*.blueprint.yaml")):
+                    bp = parser.parse_file(bp_file)
+                    generator.generate_table(bp)
+
+    # Create all blueprint tables at once so FK references resolve correctly
+    async with eng.begin() as conn:
+        await conn.run_sync(generator._metadata.create_all, checkfirst=True)
 
     yield eng
 

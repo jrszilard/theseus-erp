@@ -1,0 +1,24 @@
+plank: contacts
+entity: Contact
+version: 1
+description: A business contact — customer, supplier, or employee
+
+fields:
+  name:
+    type: string
+    required: true
+  contact_type:
+    type: enum
+    values: [customer, supplier, employee, other]
+    required: true
+  company:
+    type: string
+  email:
+    type: string
+  phone:
+    type: string
+  notes:
+    type: text
+  is_active:
+    type: boolean
+    default: true

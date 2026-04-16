@@ -1,0 +1,27 @@
+plank: contacts
+entity: Address
+version: 1
+description: A physical address linked to a contact
+
+fields:
+  label:
+    type: string
+    default: "primary"
+  street:
+    type: string
+    required: true
+  city:
+    type: string
+    required: true
+  state:
+    type: string
+  postal_code:
+    type: string
+  country:
+    type: string
+    default: "US"
+
+relations:
+  contact:
+    type: many_to_one
+    target: contacts.Contact
