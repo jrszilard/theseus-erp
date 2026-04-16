@@ -9,6 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from theseus.api.dependencies import get_blueprint
 from theseus.database import get_session
+from theseus.keel.event_store.middleware import emit_entity_event
+from theseus.keel.event_store.store import PostgresEventStore
 
 router = APIRouter(prefix="/api/v1/entities", tags=["entities"])
 
@@ -24,6 +26,14 @@ async def create_entity(plank: str, entity: str, body: dict[str, Any],
     col_params = ", ".join(f":{k}" for k in columns.keys())
     query = text(f"INSERT INTO {bp.table_name} ({col_names}) VALUES ({col_params}) RETURNING *")
     result = await session.execute(query, columns)
+
+    # Auto-emit creation event
+    store = PostgresEventStore(session=session)
+    await emit_entity_event(
+        store=store, action="created", plank=plank, entity=entity,
+        entity_id=entity_id, data=body,
+    )
+
     await session.commit()
     row = result.mappings().one()
     return _row_to_dict(row)
@@ -63,6 +73,14 @@ async def update_entity(plank: str, entity: str, entity_id: uuid.UUID, body: dic
     columns["id"] = entity_id
     query = text(f"UPDATE {bp.table_name} SET {set_clause}, updated_at = now() WHERE id = :id RETURNING *")
     result = await session.execute(query, columns)
+
+    # Auto-emit update event
+    store = PostgresEventStore(session=session)
+    await emit_entity_event(
+        store=store, action="updated", plank=plank, entity=entity,
+        entity_id=entity_id, data=body,
+    )
+
     await session.commit()
     row = result.mappings().one_or_none()
     if row is None:
