@@ -24,6 +24,16 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     debug: bool = False
 
+    # Object storage (DAM)
+    storage_backend: str = "minio"  # "minio" | "s3" | "local"
+    storage_endpoint: str = "http://localhost:9000"
+    storage_access_key: str = "minioadmin"
+    storage_secret_key: str = "minioadmin"
+    storage_bucket: str = "theseus-assets"
+    storage_region: str = "us-east-1"
+    storage_presign_ttl_seconds: int = 3600
+    storage_local_root: str = "./_asset_store"
+
     @property
     def database_url_sync(self) -> str:
         """Sync URL for Alembic migrations."""
