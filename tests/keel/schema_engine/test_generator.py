@@ -69,6 +69,21 @@ class TestSchemaGenerator:
         assert "name" in column_names
         assert "derived_value" not in column_names
 
+    def test_enum_type_name_is_unique_per_table_and_field(self) -> None:
+        # Two blueprints whose enums share first-value + length must NOT collide.
+        bp_a = Blueprint(plank="maker", entity="ProductVersion", version=1, description="v",
+            fields={"status": BlueprintField(type=FieldType.ENUM, values=["draft", "current", "retired"])})
+        bp_b = Blueprint(plank="maker", entity="Listing", version=1, description="l",
+            fields={"status": BlueprintField(type=FieldType.ENUM, values=["draft", "active", "ended"])})
+        generator = SchemaGenerator()
+        table_a = generator.generate_table(bp_a)
+        table_b = generator.generate_table(bp_b)
+        name_a = table_a.c["status"].type.name
+        name_b = table_b.c["status"].type.name
+        assert name_a == "enum_maker_product_version_status"
+        assert name_b == "enum_maker_listing_status"
+        assert name_a != name_b
+
     def test_many_to_one_generates_foreign_key_column(self) -> None:
         bp = Blueprint(plank="test", entity="Order", version=1, description="Test",
             fields={"total": BlueprintField(type=FieldType.DECIMAL)},

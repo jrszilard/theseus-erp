@@ -13,6 +13,8 @@ from theseus.keel.blueprint_engine.models import (
     Blueprint, BlueprintField, BlueprintRelation, FieldType, RelationType,
 )
 
+# NOTE: FieldType.ENUM and FieldType.FILE are handled separately in the build methods
+# (ENUM needs table+field context for a collision-free type name; FILE maps to an FK).
 FIELD_TYPE_MAP = {
     FieldType.STRING: lambda _f: String(255),
     FieldType.TEXT: lambda _f: Text(),
@@ -21,7 +23,6 @@ FIELD_TYPE_MAP = {
     FieldType.BOOLEAN: lambda _f: Boolean(),
     FieldType.DATE: lambda _f: Date(),
     FieldType.DATETIME: lambda _f: DateTime(timezone=True),
-    FieldType.ENUM: lambda f: Enum(*f.values, name=f"enum_{f.values[0]}_{len(f.values)}"),
     FieldType.JSON: lambda _f: JSON(),
 }
 
@@ -53,7 +54,10 @@ class SchemaGenerator:
         for name, field in blueprint.fields.items():
             if field.computed or field.type == FieldType.FILE:
                 continue
-            col_type = FIELD_TYPE_MAP[field.type](field)
+            if field.type == FieldType.ENUM:
+                col_type = Enum(*field.values, name=f"enum_{blueprint.table_name}_{name}")
+            else:
+                col_type = FIELD_TYPE_MAP[field.type](field)
             columns.append(
                 Column(name, col_type, nullable=not field.required, unique=field.unique or None, default=field.default)
             )
