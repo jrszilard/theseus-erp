@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
-from theseus.keel.assets.storage import LocalStorageBackend
+from theseus.keel.assets.storage import LocalStorageBackend, MinioStorageBackend
 
 
 @pytest.mark.asyncio
@@ -33,3 +35,29 @@ async def test_get_missing_key_raises(tmp_path) -> None:
     backend = LocalStorageBackend(root=str(tmp_path))
     with pytest.raises(FileNotFoundError):
         await backend.get("nope/1/missing.bin")
+
+
+@pytest.mark.asyncio
+async def test_minio_put_calls_client_put_object() -> None:
+    client = MagicMock()
+    backend = MinioStorageBackend(
+        endpoint="http://x", access_key="a", secret_key="b",
+        bucket="theseus-assets", client=client,
+    )
+    await backend.put("k/1/a.png", b"img", "image/png")
+    client.put_object.assert_called_once_with(
+        Bucket="theseus-assets", Key="k/1/a.png", Body=b"img", ContentType="image/png"
+    )
+
+
+@pytest.mark.asyncio
+async def test_minio_presign_delegates_to_client() -> None:
+    client = MagicMock()
+    client.generate_presigned_url.return_value = "http://x/signed"
+    backend = MinioStorageBackend(
+        endpoint="http://x", access_key="a", secret_key="b",
+        bucket="theseus-assets", client=client,
+    )
+    url = await backend.presign_get("k/1/a.png", ttl=120)
+    assert url == "http://x/signed"
+    client.generate_presigned_url.assert_called_once()
