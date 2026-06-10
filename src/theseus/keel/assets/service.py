@@ -10,6 +10,7 @@ from sqlalchemy.orm import selectinload
 from theseus.config import settings
 from theseus.keel.assets.models import Asset, AssetRecord, AssetVersion
 from theseus.keel.assets.protocols import StorageBackend  # noqa: TC001
+from theseus.keel.assets.thumbnails import make_thumbnail
 from theseus.keel.event_store.middleware import emit_entity_event
 from theseus.keel.event_store.store import PostgresEventStore
 
@@ -87,10 +88,18 @@ class AssetService:
     ) -> None:
         storage_key = f"{asset.id}/{version}/{filename}"
         await self._storage.put(storage_key, data, content_type)
+
+        thumbnail_key: str | None = None
+        thumb = make_thumbnail(data)
+        if thumb is not None:
+            thumbnail_key = f"{asset.id}/{version}/thumb.png"
+            await self._storage.put(thumbnail_key, thumb, "image/png")
+
         asset.versions.append(
             AssetVersion(
                 version=version, storage_key=storage_key, size_bytes=len(data),
                 checksum=hashlib.sha256(data).hexdigest(), note=note,
+                thumbnail_key=thumbnail_key,
             )
         )
         await self._session.flush()

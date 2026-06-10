@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import io
+
 import pytest
+from PIL import Image
 
 from theseus.keel.assets.service import AssetService
 from theseus.keel.assets.storage import LocalStorageBackend
@@ -67,3 +70,21 @@ async def test_presigned_url_unknown_version_raises_valueerror(asset_service) ->
     )
     with pytest.raises(ValueError):
         await asset_service.presigned_url(record.id, version=99)
+
+
+@pytest.mark.asyncio
+async def test_image_upload_gets_thumbnail(asset_service) -> None:
+    buf = io.BytesIO()
+    Image.new("RGB", (400, 400), "red").save(buf, format="PNG")
+    record = await asset_service.upload(
+        filename="art.png", content_type="image/png", data=buf.getvalue(), kind="source-art",
+    )
+    assert record.versions[0].thumbnail_key is not None
+
+
+@pytest.mark.asyncio
+async def test_svg_upload_has_no_thumbnail(asset_service) -> None:
+    record = await asset_service.upload(
+        filename="cut.svg", content_type="image/svg+xml", data=b"<svg/>", kind="cut-file",
+    )
+    assert record.versions[0].thumbnail_key is None
