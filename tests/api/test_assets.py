@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 import pytest
 
 from theseus.keel.assets.storage import LocalStorageBackend
@@ -55,3 +57,31 @@ async def test_get_asset_url(client) -> None:
     resp = await client.get(f"/api/v1/assets/{created['id']}/url")
     assert resp.status_code == 200
     assert "url" in resp.json()
+
+
+@pytest.mark.asyncio
+async def test_add_version_returns_201_with_two_versions(client) -> None:
+    created = (
+        await client.post(
+            "/api/v1/assets",
+            files={"file": ("a.svg", b"v1", "image/svg+xml")},
+            data={"kind": "cut-file"},
+        )
+    ).json()
+    resp = await client.post(
+        f"/api/v1/assets/{created['id']}/versions",
+        files={"file": ("a.svg", b"v2", "image/svg+xml")},
+        data={"note": "v2"},
+    )
+    assert resp.status_code == 201
+    assert len(resp.json()["versions"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_add_version_unknown_asset_returns_404(client) -> None:
+    resp = await client.post(
+        f"/api/v1/assets/{uuid.uuid4()}/versions",
+        files={"file": ("a.svg", b"x", "image/svg+xml")},
+        data={"note": ""},
+    )
+    assert resp.status_code == 404

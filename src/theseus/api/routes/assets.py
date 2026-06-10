@@ -58,13 +58,16 @@ async def add_asset_version(
 ) -> dict[str, Any]:
     service = AssetService(session=session, storage=_get_storage())
     data = await file.read()
-    record = await service.add_version(
-        asset_id=asset_id,
-        filename=file.filename or "upload.bin",
-        content_type=file.content_type or "application/octet-stream",
-        data=data,
-        note=note or None,
-    )
+    try:
+        record = await service.add_version(
+            asset_id=asset_id,
+            filename=file.filename or "upload.bin",
+            content_type=file.content_type or "application/octet-stream",
+            data=data,
+            note=note or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     await session.commit()
     return record.model_dump(mode="json")
 
