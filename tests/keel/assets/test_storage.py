@@ -61,3 +61,10 @@ async def test_minio_presign_delegates_to_client() -> None:
     url = await backend.presign_get("k/1/a.png", ttl=120)
     assert url == "http://x/signed"
     client.generate_presigned_url.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_local_backend_rejects_path_traversal(tmp_path) -> None:
+    backend = LocalStorageBackend(root=str(tmp_path))
+    with pytest.raises(ValueError):
+        await backend.put("../escape.txt", b"x", "text/plain")

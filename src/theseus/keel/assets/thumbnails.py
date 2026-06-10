@@ -10,7 +10,7 @@ def make_thumbnail(data: bytes, max_px: int = 256) -> bytes | None:
     try:
         image = Image.open(io.BytesIO(data))
         image.load()
-    except (UnidentifiedImageError, OSError):
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
         return None
     image.thumbnail((max_px, max_px))
     out = io.BytesIO()

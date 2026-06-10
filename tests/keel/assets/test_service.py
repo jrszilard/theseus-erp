@@ -88,3 +88,14 @@ async def test_svg_upload_has_no_thumbnail(asset_service) -> None:
         filename="cut.svg", content_type="image/svg+xml", data=b"<svg/>", kind="cut-file",
     )
     assert record.versions[0].thumbnail_key is None
+
+
+@pytest.mark.asyncio
+async def test_upload_sanitizes_traversal_filename(asset_service) -> None:
+    record = await asset_service.upload(
+        filename="../../../etc/evil", content_type="text/plain", data=b"x", kind="other",
+    )
+    key = record.versions[0].storage_key
+    assert ".." not in key
+    # the stored bytes must be retrievable (i.e. the sanitized key is valid + contained)
+    assert await asset_service._storage.get(key) == b"x"

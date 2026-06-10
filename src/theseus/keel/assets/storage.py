@@ -17,19 +17,26 @@ class LocalStorageBackend:
         self._root.mkdir(parents=True, exist_ok=True)
         self._base_url = base_url.rstrip("/")
 
+    def _resolve(self, key: str) -> Path:
+        path = (self._root / key).resolve()
+        if not path.is_relative_to(self._root.resolve()):
+            msg = f"invalid storage key: {key}"
+            raise ValueError(msg)
+        return path
+
     async def put(self, key: str, data: bytes, content_type: str) -> None:
-        path = self._root / key
+        path = self._resolve(key)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
 
     async def get(self, key: str) -> bytes:
-        return (self._root / key).read_bytes()
+        return self._resolve(key).read_bytes()
 
     async def presign_get(self, key: str, ttl: int) -> str:
         return f"{self._base_url}/{key}"
 
     async def delete(self, key: str) -> None:
-        path = self._root / key
+        path = self._resolve(key)
         if path.exists():
             path.unlink()
 

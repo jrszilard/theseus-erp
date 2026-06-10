@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import posixpath
 import uuid  # noqa: TC003
 
 from sqlalchemy import select
@@ -86,7 +87,8 @@ class AssetService:
         self, asset: Asset, filename: str, content_type: str, data: bytes,
         version: int, note: str | None,
     ) -> None:
-        storage_key = f"{asset.id}/{version}/{filename}"
+        safe_name = posixpath.basename(filename).lstrip(".") or "file.bin"
+        storage_key = f"{asset.id}/{version}/{safe_name}"
         await self._storage.put(storage_key, data, content_type)
 
         thumbnail_key: str | None = None
