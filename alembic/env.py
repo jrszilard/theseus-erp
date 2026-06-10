@@ -14,6 +14,7 @@ import theseus.keel.event_store.models  # noqa: F401
 import theseus.keel.knowledge_graph.models  # noqa: F401
 import theseus.keel.auth.models  # noqa: F401
 import theseus.shipwright.conversation.models  # noqa: F401
+import theseus.keel.assets.models  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)
