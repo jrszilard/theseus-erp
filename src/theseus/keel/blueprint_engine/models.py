@@ -17,6 +17,7 @@ class FieldType(StrEnum):
     DATETIME = "datetime"
     ENUM = "enum"
     JSON = "json"
+    FILE = "file"
 
 
 class RelationType(StrEnum):
@@ -41,6 +42,7 @@ class BlueprintField(BaseModel):
     unique: bool = False
     default: Any = None
     computed: bool = False
+    multiple: bool = False
     values: list[str] | None = None
     ui: UIHints | None = None
 

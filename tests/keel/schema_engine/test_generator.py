@@ -77,3 +77,44 @@ class TestSchemaGenerator:
         table = generator.generate_table(bp)
         column_names = {c.name for c in table.columns}
         assert "customer_id" in column_names
+
+
+def test_single_file_field_becomes_asset_fk_column() -> None:
+    from sqlalchemy import MetaData
+
+    from theseus.keel.blueprint_engine.models import Blueprint, BlueprintField, FieldType
+    from theseus.keel.schema_engine.generator import SchemaGenerator
+
+    bp = Blueprint(
+        plank="maker", entity="Design", version=1, description="x",
+        fields={
+            "title": BlueprintField(type=FieldType.STRING, required=True),
+            "cover": BlueprintField(type=FieldType.FILE),
+        },
+    )
+    table = SchemaGenerator(MetaData()).generate_table(bp)
+    assert "cover_asset_id" in table.c
+    fk = next(iter(table.c["cover_asset_id"].foreign_keys))
+    assert fk.target_fullname == "assets.id"
+    assert "cover" not in table.c
+
+
+def test_multiple_file_field_creates_junction_table() -> None:
+    from sqlalchemy import MetaData
+
+    from theseus.keel.blueprint_engine.models import Blueprint, BlueprintField, FieldType
+    from theseus.keel.schema_engine.generator import SchemaGenerator
+
+    metadata = MetaData()
+    bp = Blueprint(
+        plank="maker", entity="Design", version=1, description="x",
+        fields={
+            "title": BlueprintField(type=FieldType.STRING, required=True),
+            "source_art": BlueprintField(type=FieldType.FILE, multiple=True),
+        },
+    )
+    SchemaGenerator(metadata).generate_table(bp)
+    assert "maker_design_source_art" in metadata.tables
+    junction = metadata.tables["maker_design_source_art"]
+    assert "asset_id" in junction.c
+    assert "maker_design_id" in junction.c

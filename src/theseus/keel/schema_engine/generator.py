@@ -36,7 +36,10 @@ class SchemaGenerator:
         columns = self._build_system_columns()
         columns.extend(self._build_field_columns(blueprint))
         columns.extend(self._build_relation_columns(blueprint))
-        return Table(blueprint.table_name, self._metadata, *columns)
+        columns.extend(self._build_file_columns(blueprint))
+        table = Table(blueprint.table_name, self._metadata, *columns)
+        self._build_file_junctions(blueprint)
+        return table
 
     def _build_system_columns(self) -> list[Column]:
         return [
@@ -48,7 +51,7 @@ class SchemaGenerator:
     def _build_field_columns(self, blueprint: Blueprint) -> list[Column]:
         columns: list[Column] = []
         for name, field in blueprint.fields.items():
-            if field.computed:
+            if field.computed or field.type == FieldType.FILE:
                 continue
             col_type = FIELD_TYPE_MAP[field.type](field)
             columns.append(
@@ -67,6 +70,32 @@ class SchemaGenerator:
                     Column(f"{name}_id", UUID(as_uuid=True), ForeignKey(f"{target_table}.id"), nullable=True)
                 )
         return columns
+
+    def _build_file_columns(self, blueprint: Blueprint) -> list[Column]:
+        columns: list[Column] = []
+        for name, field in blueprint.fields.items():
+            if field.type == FieldType.FILE and not field.multiple:
+                columns.append(
+                    Column(
+                        f"{name}_asset_id", UUID(as_uuid=True),
+                        ForeignKey("assets.id"), nullable=not field.required,
+                    )
+                )
+        return columns
+
+    def _build_file_junctions(self, blueprint: Blueprint) -> None:
+        for name, field in blueprint.fields.items():
+            if field.type == FieldType.FILE and field.multiple:
+                Table(
+                    f"{blueprint.table_name}_{name}", self._metadata,
+                    Column("id", UUID(as_uuid=True), primary_key=True, default=uuid.uuid4),
+                    Column(
+                        f"{blueprint.table_name}_id", UUID(as_uuid=True),
+                        ForeignKey(f"{blueprint.table_name}.id"), nullable=False,
+                    ),
+                    Column("asset_id", UUID(as_uuid=True), ForeignKey("assets.id"), nullable=False),
+                    Column("sort_order", Integer, default=0),
+                )
 
 
 def _relation_target_table_name(relation: BlueprintRelation) -> str:

@@ -135,3 +135,14 @@ class TestBlueprint:
                 description="No fields",
                 fields={},
             )
+
+
+def test_file_field_type_and_multiple_flag() -> None:
+    from theseus.keel.blueprint_engine.models import BlueprintField, FieldType
+
+    single = BlueprintField(type=FieldType.FILE)
+    assert single.type == FieldType.FILE
+    assert single.multiple is False
+
+    many = BlueprintField(type=FieldType.FILE, multiple=True)
+    assert many.multiple is True
