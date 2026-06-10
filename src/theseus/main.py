@@ -8,7 +8,7 @@ from fastapi import FastAPI
 
 from theseus.api.dependencies import set_registry
 from theseus.api.middleware import RequestLoggingMiddleware
-from theseus.api.routes import entities, health, shipwright
+from theseus.api.routes import assets, entities, health, shipwright
 from theseus.database import async_session_factory, engine
 from theseus.keel.blueprint_engine.parser import BlueprintFileParser
 from theseus.keel.blueprint_engine.registry import BlueprintRegistry
@@ -64,6 +64,7 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestLoggingMiddleware)
     app.include_router(health.router)
     app.include_router(entities.router)
+    app.include_router(assets.router)
     app.include_router(shipwright.router)
     return app
 
