@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import Any, cast
 
-import boto3
-from botocore.client import Config
+import boto3  # type: ignore[import-untyped]
+from botocore.client import Config  # type: ignore[import-untyped]
+from botocore.exceptions import ClientError  # type: ignore[import-untyped]
 
 
 class LocalStorageBackend:
@@ -46,10 +48,10 @@ class MinioStorageBackend:
         secret_key: str,
         bucket: str,
         region: str = "us-east-1",
-        client: object | None = None,
+        client: Any | None = None,
     ) -> None:
         self._bucket = bucket
-        self._client = client or boto3.client(
+        self._client: Any = client or boto3.client(
             "s3",
             endpoint_url=endpoint,
             aws_access_key_id=access_key,
@@ -61,8 +63,12 @@ class MinioStorageBackend:
     def ensure_bucket(self) -> None:
         try:
             self._client.head_bucket(Bucket=self._bucket)
-        except Exception:
-            self._client.create_bucket(Bucket=self._bucket)
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code in ("404", "NoSuchBucket", "NotFound"):
+                self._client.create_bucket(Bucket=self._bucket)
+            else:
+                raise
 
     async def put(self, key: str, data: bytes, content_type: str) -> None:
         await asyncio.to_thread(
@@ -75,7 +81,8 @@ class MinioStorageBackend:
 
     async def get(self, key: str) -> bytes:
         def _read() -> bytes:
-            return self._client.get_object(Bucket=self._bucket, Key=key)["Body"].read()
+            body = self._client.get_object(Bucket=self._bucket, Key=key)["Body"].read()
+            return cast("bytes", body)
 
         return await asyncio.to_thread(_read)
 

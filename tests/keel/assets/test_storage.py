@@ -26,3 +26,10 @@ async def test_delete_removes_object(tmp_path) -> None:
     await backend.delete("k/1/x.bin")
     with pytest.raises(FileNotFoundError):
         await backend.get("k/1/x.bin")
+
+
+@pytest.mark.asyncio
+async def test_get_missing_key_raises(tmp_path) -> None:
+    backend = LocalStorageBackend(root=str(tmp_path))
+    with pytest.raises(FileNotFoundError):
+        await backend.get("nope/1/missing.bin")
