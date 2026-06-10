@@ -44,7 +44,6 @@ class AssetService:
             },
             actor_id=actor_id,
         )
-        await self._session.flush()
         return await self.get(asset.id)
 
     async def add_version(
@@ -71,13 +70,12 @@ class AssetService:
 
     async def presigned_url(self, asset_id: uuid.UUID, version: int | None = None) -> str:
         asset = await self._load(asset_id)
-        target = (
-            next(v for v in asset.versions if v.version == version)
-            if version is not None
-            else asset.current_version
-        )
+        if version is not None:
+            target = next((v for v in asset.versions if v.version == version), None)
+        else:
+            target = asset.current_version
         if target is None:
-            msg = f"Asset {asset_id} has no versions"
+            msg = f"Asset {asset_id} has no matching version"
             raise ValueError(msg)
         return await self._storage.presign_get(
             target.storage_key, ttl=settings.storage_presign_ttl_seconds

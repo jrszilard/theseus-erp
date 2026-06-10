@@ -58,3 +58,12 @@ async def test_upload_emits_event(asset_service, db_session) -> None:
     store = PostgresEventStore(session=db_session)
     events = await store.get_events_for_entity("Asset", record.id)
     assert any(e.event_type == "assets.Asset.uploaded" for e in events)
+
+
+@pytest.mark.asyncio
+async def test_presigned_url_unknown_version_raises_valueerror(asset_service) -> None:
+    record = await asset_service.upload(
+        filename="a.png", content_type="image/png", data=b"img", kind="mockup",
+    )
+    with pytest.raises(ValueError):
+        await asset_service.presigned_url(record.id, version=99)
