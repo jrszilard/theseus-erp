@@ -203,6 +203,34 @@ class MakerService:
 
         return float(material_cost + labor_cost)
 
+    async def buildable_now(self, variation_id: uuid.UUID) -> int:
+        """How many units can be made right now = min over recipe lines of
+        floor(material on-hand / qty_per_unit). 0 if no recipe or no lines."""
+        var = await self._session.execute(
+            text("SELECT recipe_id FROM maker_variation WHERE id = :id"), {"id": variation_id}
+        )
+        var_row = var.mappings().one_or_none()
+        if var_row is None or var_row["recipe_id"] is None:
+            return 0
+
+        lines = await self._session.execute(
+            text("SELECT material_id, qty_per_unit FROM maker_recipe_line WHERE recipe_id = :rid"),
+            {"rid": var_row["recipe_id"]},
+        )
+        line_rows = lines.mappings().all()
+        if not line_rows:
+            return 0
+
+        buildable: int | None = None
+        for line in line_rows:
+            per_unit = Decimal(str(line["qty_per_unit"]))
+            if per_unit <= 0:
+                continue
+            stock = Decimal(str(await self._inventory.get_stock_level(line["material_id"])))
+            possible = int(stock // per_unit)
+            buildable = possible if buildable is None else min(buildable, possible)
+        return buildable if buildable is not None else 0
+
 
 def _row_to_dict(row: Any) -> dict[str, Any]:
     result: dict[str, Any] = {}

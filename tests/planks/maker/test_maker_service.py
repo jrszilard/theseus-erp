@@ -149,3 +149,60 @@ async def test_unit_cogs_labor_only_recipe(db_session) -> None:
     )
     cogs = await svc.unit_cogs(uuid.UUID(variation["id"]))
     assert cogs == pytest.approx(10.00)
+
+
+@pytest.mark.asyncio
+async def test_buildable_now_is_limited_by_scarcest_material(db_session) -> None:
+    svc = MakerService(session=db_session)
+    wh = await svc._inventory.create_warehouse(name="StudioB", code="STUDIOB")
+    wid = uuid.UUID(wh["id"])
+
+    card = await svc.create_material(sku="MAT-CARD-B", name="Cardstock", unit="sheet")
+    ink = await svc.create_material(sku="MAT-INK-B", name="Ink", unit="ml")
+    await svc.record_material_purchase(
+        material_id=uuid.UUID(card["id"]), quantity=8, unit_cost=0.20, warehouse_id=wid
+    )  # 8 sheets
+    await svc.record_material_purchase(
+        material_id=uuid.UUID(ink["id"]), quantity=20, unit_cost=0.10, warehouse_id=wid
+    )  # 20 ml
+
+    recipe = await svc.create_recipe()
+    await svc.add_recipe_line(
+        recipe_id=uuid.UUID(recipe["id"]), material_id=uuid.UUID(card["id"]), qty_per_unit=1
+    )  # 8/1 = 8
+    await svc.add_recipe_line(
+        recipe_id=uuid.UUID(recipe["id"]), material_id=uuid.UUID(ink["id"]), qty_per_unit=3
+    )  # floor(20/3) = 6
+    variation = await svc.create_variation(
+        sku="VAR-B", base_price=10.0, recipe_id=uuid.UUID(recipe["id"])
+    )
+
+    buildable = await svc.buildable_now(uuid.UUID(variation["id"]))
+    assert buildable == 6  # limited by ink
+
+
+@pytest.mark.asyncio
+async def test_buildable_now_zero_without_recipe_or_materials(db_session) -> None:
+    svc = MakerService(session=db_session)
+    variation = await svc.create_variation(sku="VAR-B-EMPTY", base_price=10.0)
+    assert await svc.buildable_now(uuid.UUID(variation["id"])) == 0
+
+
+@pytest.mark.asyncio
+async def test_buildable_now_handles_sub_unit_quantities(db_session) -> None:
+    svc = MakerService(session=db_session)
+    wh = await svc._inventory.create_warehouse(name="StudioSub", code="STUDIOSUB")
+    ink = await svc.create_material(sku="MAT-INK-SUB", name="Ink", unit="ml")
+    # 1 ml on hand, 0.1 ml per unit -> 10 buildable (float // would wrongly give 9)
+    await svc.record_material_purchase(
+        material_id=uuid.UUID(ink["id"]), quantity=1, unit_cost=0.50,
+        warehouse_id=uuid.UUID(wh["id"]),
+    )
+    recipe = await svc.create_recipe()
+    await svc.add_recipe_line(
+        recipe_id=uuid.UUID(recipe["id"]), material_id=uuid.UUID(ink["id"]), qty_per_unit=0.1,
+    )
+    variation = await svc.create_variation(
+        sku="VAR-SUB", base_price=2.0, recipe_id=uuid.UUID(recipe["id"])
+    )
+    assert await svc.buildable_now(uuid.UUID(variation["id"])) == 10
