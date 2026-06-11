@@ -11,6 +11,7 @@ from sqlalchemy import text
 from theseus.database import get_session
 from theseus.keel.llm_gateway.gateway import LLMGateway
 from theseus.planks.maker.capture import llm_available, parse_sale_text
+from theseus.planks.maker.insights import MakerInsights
 from theseus.planks.maker.service import MakerService
 from theseus.web import read_models
 from theseus.web.templating import templates
@@ -54,8 +55,10 @@ async def bom(request: Request, variation_id: uuid.UUID,
     wh = (await session.execute(
         text("SELECT id FROM inventory_warehouse ORDER BY created_at LIMIT 1")
     )).scalar()
+    restock = await MakerInsights(session=session).restock()
     return templates.TemplateResponse(request, "bom.html",
-                                      {"bom": view, "warehouse_id": str(wh) if wh else ""})
+                                      {"bom": view, "warehouse_id": str(wh) if wh else "",
+                                       "restock": restock})
 
 
 @router.post("/bom/{variation_id}/run", response_class=HTMLResponse)

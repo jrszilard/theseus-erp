@@ -34,6 +34,22 @@ async def test_bom_404_for_unknown(client) -> None:
 
 
 @pytest.mark.asyncio
+async def test_bom_sidebar_shows_restock_when_material_low(client, db_session, maker_seed) -> None:
+    import uuid as _uuid
+
+    from theseus.planks.maker.service import MakerService
+    mat = maker_seed["material_id"]
+    vid = maker_seed["variation_id"]
+    # force the seed material below its reorder point
+    svc = MakerService(session=db_session)
+    await svc.set_reorder_point(_uuid.UUID(mat), 100000)
+    await db_session.commit()
+    resp = await client.get(f"/bom/{vid}")
+    assert resp.status_code == 200
+    assert "reorder at" in resp.text.lower()  # the restock nudge rendered in the sidebar
+
+
+@pytest.mark.asyncio
 async def test_set_reorder_updates_low_flag(client, db_session, maker_seed) -> None:
     from sqlalchemy import text
     mat = maker_seed["material_id"]

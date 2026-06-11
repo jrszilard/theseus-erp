@@ -50,3 +50,13 @@
 {% endcall %}
 <p><a href="#">↗ Open full Materials catalog</a> <span class="muted">(coming later)</span></p>
 {% endblock %}
+
+{% block shipwright %}
+  {% if restock %}
+    {% for r in restock %}
+    <div class="sw-bubble sw-warn">{{ r.nudge }}</div>
+    {% endfor %}
+  {% else %}
+    <div class="sw-bubble sw-info">Materials stocked up — no restock nudges.</div>
+  {% endif %}
+{% endblock %}

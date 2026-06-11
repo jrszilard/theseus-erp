@@ -1,4 +1,3 @@
-# tests/planks/maker/test_capture.py
 import pytest
 
 from theseus.planks.maker.capture import ParsedSaleLine, parse_sale_text

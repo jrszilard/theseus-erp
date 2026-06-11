@@ -69,3 +69,5 @@ table.bom-table thead td { color: var(--color-text-muted); }
 .sales-seg { background: var(--color-primary); }
 .sales-seg:nth-child(even) { background: var(--color-success); }
 .sw-bubble { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-md); padding: var(--space-3); margin-bottom: var(--space-2); font-size: var(--text-sm); }
+.sw-warn { border-color: var(--color-danger); }
+.sw-info { border-color: var(--color-border); }
