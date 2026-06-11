@@ -59,3 +59,31 @@ async def test_tally_well_formed_json_wrong_shape_returns_422(client) -> None:
         data={"session": '[{"variation_id": "not-a-uuid", "quantity": "1"}]'},
     )
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_manual_sale_records_fees_and_decrements_stock(
+    client, db_session, maker_seed
+) -> None:
+    import uuid as _uuid
+
+    from sqlalchemy import text
+
+    from theseus.planks.maker.service import MakerService
+
+    me = maker_seed["market_event_id"]
+    vid = maker_seed["variation_id"]
+    ch = maker_seed["channel_id"]
+    svc = MakerService(session=db_session)
+    before = await svc.variation_on_hand(_uuid.UUID(vid))
+    resp = await client.post(
+        f"/markets/{me}/sale",
+        data={"variation_id": vid, "channel_id": ch, "quantity": "2", "unit_price": "25"},
+    )
+    assert resp.status_code == 200
+    after = await svc.variation_on_hand(_uuid.UUID(vid))
+    assert after == before - 2
+    fees = (await db_session.execute(text(
+        "SELECT fees FROM maker_sale WHERE source='manual' ORDER BY sale_date DESC LIMIT 1"
+    ))).scalar()
+    assert float(fees) > 0  # channel fee computed, not the old hardcoded 0

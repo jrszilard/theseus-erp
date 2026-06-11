@@ -90,13 +90,10 @@ async def market_sale(request: Request, market_event_id: uuid.UUID,
                       variation_id: uuid.UUID = Form(...), channel_id: uuid.UUID = Form(...),  # noqa: B008
                       quantity: float = Form(...), unit_price: float = Form(...),
                       session: AsyncSession = Depends(get_session)) -> HTMLResponse:  # noqa: B008
-    sale_id = uuid.uuid4()
-    await session.execute(text(
-        "INSERT INTO maker_sale (id, quantity, unit_price, fees, sale_date, source, "
-        "variation_id, channel_id, market_event_id) "
-        "VALUES (:i, :q, :p, 0, now(), 'manual', :v, :c, :m)"
-    ), {"i": sale_id, "q": quantity, "p": unit_price,
-        "v": variation_id, "c": channel_id, "m": market_event_id})
+    svc = MakerService(session=session)
+    await svc.record_sale(variation_id=variation_id, channel_id=channel_id,
+                          quantity=quantity, unit_price=unit_price, source="manual",
+                          market_event_id=market_event_id)
     await session.commit()
     view = await read_models.get_market_day(session, market_event_id)
     return templates.TemplateResponse(request, "partials/_market_lines.html", {"market": view})
@@ -130,12 +127,16 @@ async def market_tally(request: Request, market_event_id: uuid.UUID,
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="invalid tally payload",
         ) from exc
+    svc = MakerService(session=session)
     for p in params:
-        await session.execute(text(
-            "INSERT INTO maker_sale (id, quantity, unit_price, fees, sale_date, source, "
-            "variation_id, channel_id, market_event_id) "
-            "VALUES (:i, :q, :p, 0, now(), 'tally', :v, :c, :m)"
-        ), p)
+        await svc.record_sale(
+            variation_id=uuid.UUID(str(p["v"])),
+            channel_id=uuid.UUID(str(p["c"])),
+            quantity=float(p["q"]),  # type: ignore[arg-type]
+            unit_price=float(p["p"]),  # type: ignore[arg-type]
+            source="tally",
+            market_event_id=market_event_id,
+        )
     await session.commit()
     view = await read_models.get_market_day(session, market_event_id)
     return templates.TemplateResponse(request, "partials/_market_lines.html", {"market": view})
