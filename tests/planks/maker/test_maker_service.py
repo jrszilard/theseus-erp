@@ -289,3 +289,71 @@ async def test_run_production_without_recipe_adds_stock_zero_cogs(db_session) ->
     assert run["unit_cogs_snapshot"] == pytest.approx(0.0)
     assert run["total_cogs"] == pytest.approx(0.0)
     assert await svc.variation_on_hand(vid) == 3.0
+
+
+async def _seed_sale_graph(db_session):
+    """Minimal channel + variation-with-finished-stock + warehouse for sale tests."""
+    svc = MakerService(session=db_session)
+    wh = await svc._inventory.create_warehouse(name="Studio", code="RS-STUDIO")
+    wid = uuid.UUID(wh["id"])
+    fg = await svc.create_finished_good(sku="RS-FG", name="Loon 8x10")
+    var = await svc.create_variation(sku="RS-8x10", base_price=25.0,
+                                     finished_stock_id=uuid.UUID(fg["id"]))
+    await svc.run_production(variation_id=uuid.UUID(var["id"]), quantity=10, warehouse_id=wid)
+    ch_id = uuid.uuid4()
+    await db_session.execute(text(
+        "INSERT INTO maker_channel (id, name, fee_percent, fee_fixed, is_active) "
+        "VALUES (:i, 'Etsy', 6.5, 0.20, true)"), {"i": ch_id})
+    await db_session.flush()
+    return uuid.UUID(var["id"]), ch_id, wid
+
+
+@pytest.mark.asyncio
+async def test_record_sale_computes_channel_fees(db_session) -> None:
+    var_id, ch_id, _ = await _seed_sale_graph(db_session)
+    svc = MakerService(session=db_session)
+    sale = await svc.record_sale(variation_id=var_id, channel_id=ch_id,
+                                 quantity=2, unit_price=25.0, source="manual")
+    # 6.5% of 50 + 0.20 fixed = 3.45
+    assert sale["fees"] == pytest.approx(3.45)
+    assert sale["source"] == "manual"
+
+
+@pytest.mark.asyncio
+async def test_record_sale_decrements_finished_stock(db_session) -> None:
+    var_id, ch_id, _ = await _seed_sale_graph(db_session)
+    svc = MakerService(session=db_session)
+    assert await svc.variation_on_hand(var_id) == 10
+    await svc.record_sale(variation_id=var_id, channel_id=ch_id,
+                          quantity=3, unit_price=25.0, source="tally")
+    assert await svc.variation_on_hand(var_id) == 7
+
+
+@pytest.mark.asyncio
+async def test_record_sale_allows_oversell(db_session) -> None:
+    var_id, ch_id, _ = await _seed_sale_graph(db_session)
+    svc = MakerService(session=db_session)
+    await svc.record_sale(variation_id=var_id, channel_id=ch_id,
+                          quantity=12, unit_price=25.0, source="manual")  # only 10 on hand
+    assert await svc.variation_on_hand(var_id) == -2  # reality wins, no error
+
+
+@pytest.mark.asyncio
+async def test_record_sale_emits_event(db_session) -> None:
+    from theseus.keel.event_store.store import PostgresEventStore
+    var_id, ch_id, _ = await _seed_sale_graph(db_session)
+    svc = MakerService(session=db_session)
+    await svc.record_sale(variation_id=var_id, channel_id=ch_id,
+                          quantity=1, unit_price=25.0, source="shipwright_nl")
+    store = PostgresEventStore(session=db_session)
+    events = await store.get_events_by_type("maker.Sale.recorded")
+    assert any(e.data.get("source") == "shipwright_nl" for e in events)
+
+
+@pytest.mark.asyncio
+async def test_record_sale_unknown_channel_raises(db_session) -> None:
+    var_id, _, _ = await _seed_sale_graph(db_session)
+    svc = MakerService(session=db_session)
+    with pytest.raises(ValueError, match="Channel"):
+        await svc.record_sale(variation_id=var_id, channel_id=uuid.uuid4(),
+                              quantity=1, unit_price=25.0, source="manual")

@@ -302,6 +302,59 @@ class MakerService:
         await self._session.flush()
         return _row_to_dict(result.mappings().one())
 
+    async def record_sale(
+        self, *, variation_id: uuid.UUID, channel_id: uuid.UUID,
+        quantity: float, unit_price: float, source: str,
+        market_event_id: uuid.UUID | None = None,
+        warehouse_id: uuid.UUID | None = None,
+        sale_date: Any = None,
+    ) -> dict[str, Any]:
+        """The single sale write-path: validate, compute channel fees, append the
+        maker_sale row, decrement finished stock (no oversell block — reality wins),
+        and emit a Sale audit event. flush(); the caller commits."""
+        var_row = await self._get_variation_row(variation_id)
+        if var_row is None:
+            msg = f"Variation {variation_id} not found"
+            raise ValueError(msg)
+        ch = (await self._session.execute(
+            text("SELECT fee_percent, fee_fixed FROM maker_channel WHERE id = :c"),
+            {"c": channel_id},
+        )).mappings().one_or_none()
+        if ch is None:
+            msg = f"Channel {channel_id} not found"
+            raise ValueError(msg)
+
+        gross = quantity * unit_price
+        fees = round(float(ch["fee_percent"] or 0) / 100 * gross + float(ch["fee_fixed"] or 0), 4)
+
+        sale_id = uuid.uuid4()
+        await self._session.execute(text(
+            "INSERT INTO maker_sale (id, quantity, unit_price, fees, sale_date, source, "
+            "variation_id, channel_id, market_event_id) "
+            "VALUES (:i, :q, :p, :f, COALESCE(CAST(:d AS timestamptz), now()), :src, :v, :c, :m)"
+        ), {"i": sale_id, "q": quantity, "p": unit_price, "f": fees, "d": sale_date,
+            "src": source, "v": variation_id, "c": channel_id, "m": market_event_id})
+
+        if var_row["finished_stock_id"] is not None:
+            wh = warehouse_id or (await self._session.execute(
+                text("SELECT id FROM inventory_warehouse ORDER BY created_at LIMIT 1")
+            )).scalar()
+            if wh is not None:
+                await self._inventory.record_movement(
+                    stock_item_id=var_row["finished_stock_id"], warehouse_id=wh,
+                    movement_type="adjusted", quantity=-quantity, reference="sale",
+                )
+
+        await emit_entity_event(
+            store=self._store, action="recorded", plank="maker", entity="Sale",
+            entity_id=sale_id,
+            data={"variation_id": str(variation_id), "channel_id": str(channel_id),
+                  "quantity": quantity, "unit_price": unit_price, "fees": fees, "source": source},
+        )
+        await self._session.flush()
+        return {"id": str(sale_id), "quantity": quantity, "unit_price": unit_price,
+                "fees": fees, "source": source}
+
 
 def _row_to_dict(row: Any) -> dict[str, Any]:
     result: dict[str, Any] = {}
