@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% import 'maker.html' as mk %}
+{% block title %}Ideas — Maker Edition{% endblock %}
+{% block content %}
+<h1>Ideas</h1>
+<div class="board-grid">
+  {% for d in designs %}
+    {{ mk.design_card(d) }}
+  {% else %}
+    <p class="muted">No designs yet.</p>
+  {% endfor %}
+</div>
+{% endblock %}
