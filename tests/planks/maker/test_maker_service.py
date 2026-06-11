@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 import pytest
 from sqlalchemy import text
@@ -315,7 +316,7 @@ async def test_record_sale_computes_channel_fees(db_session) -> None:
     sale = await svc.record_sale(variation_id=var_id, channel_id=ch_id,
                                  quantity=2, unit_price=25.0, source="manual")
     # 6.5% of 50 + 0.20 fixed = 3.45
-    assert sale["fees"] == pytest.approx(3.45)
+    assert float(sale["fees"]) == pytest.approx(3.45)
     assert sale["source"] == "manual"
 
 
@@ -357,3 +358,28 @@ async def test_record_sale_unknown_channel_raises(db_session) -> None:
     with pytest.raises(ValueError, match="Channel"):
         await svc.record_sale(variation_id=var_id, channel_id=uuid.uuid4(),
                               quantity=1, unit_price=25.0, source="manual")
+
+
+@pytest.mark.asyncio
+async def test_record_sale_unknown_variation_raises(db_session) -> None:
+    _, ch_id, _ = await _seed_sale_graph(db_session)
+    svc = MakerService(session=db_session)
+    with pytest.raises(ValueError, match="Variation"):
+        await svc.record_sale(variation_id=uuid.uuid4(), channel_id=ch_id,
+                              quantity=1, unit_price=25.0, source="manual")
+
+
+@pytest.mark.asyncio
+async def test_record_sale_stores_explicit_sale_date(db_session) -> None:
+    var_id, ch_id, _ = await _seed_sale_graph(db_session)
+    svc = MakerService(session=db_session)
+    explicit_date = datetime(2025, 1, 2, 12, 0)
+    sale = await svc.record_sale(variation_id=var_id, channel_id=ch_id,
+                                 quantity=1, unit_price=25.0, source="manual",
+                                 sale_date=explicit_date)
+    row = await db_session.execute(
+        text("SELECT sale_date FROM maker_sale WHERE id = :id"),
+        {"id": uuid.UUID(sale["id"])},
+    )
+    stored = row.scalar()
+    assert stored.date() == explicit_date.date()

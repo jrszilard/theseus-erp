@@ -11,6 +11,8 @@ from theseus.keel.event_store.store import PostgresEventStore
 from theseus.planks.inventory.service import InventoryService
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -307,7 +309,7 @@ class MakerService:
         quantity: float, unit_price: float, source: str,
         market_event_id: uuid.UUID | None = None,
         warehouse_id: uuid.UUID | None = None,
-        sale_date: Any = None,
+        sale_date: datetime | None = None,
     ) -> dict[str, Any]:
         """The single sale write-path: validate, compute channel fees, append the
         maker_sale row, decrement finished stock (no oversell block — reality wins),
@@ -325,13 +327,16 @@ class MakerService:
             raise ValueError(msg)
 
         gross = quantity * unit_price
-        fees = round(float(ch["fee_percent"] or 0) / 100 * gross + float(ch["fee_fixed"] or 0), 4)
+        fees = float(round(
+            Decimal(str(ch["fee_percent"] or 0)) / 100 * Decimal(str(gross))
+            + Decimal(str(ch["fee_fixed"] or 0)), 4))
 
         sale_id = uuid.uuid4()
-        await self._session.execute(text(
+        result = await self._session.execute(text(
             "INSERT INTO maker_sale (id, quantity, unit_price, fees, sale_date, source, "
             "variation_id, channel_id, market_event_id) "
-            "VALUES (:i, :q, :p, :f, COALESCE(CAST(:d AS timestamptz), now()), :src, :v, :c, :m)"
+            "VALUES (:i, :q, :p, :f, COALESCE(CAST(:d AS timestamptz), now()), :src, :v, :c, :m) "
+            "RETURNING *"
         ), {"i": sale_id, "q": quantity, "p": unit_price, "f": fees, "d": sale_date,
             "src": source, "v": variation_id, "c": channel_id, "m": market_event_id})
 
@@ -352,8 +357,7 @@ class MakerService:
                   "quantity": quantity, "unit_price": unit_price, "fees": fees, "source": source},
         )
         await self._session.flush()
-        return {"id": str(sale_id), "quantity": quantity, "unit_price": unit_price,
-                "fees": fees, "source": source}
+        return _row_to_dict(result.mappings().one())
 
 
 def _row_to_dict(row: Any) -> dict[str, Any]:
