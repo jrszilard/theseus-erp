@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import text
 
+from theseus.planks.maker.insights import MakerInsights
 from theseus.planks.maker.service import MakerService
 
 if TYPE_CHECKING:
@@ -94,10 +95,9 @@ async def get_design_detail(session: AsyncSession, design_id: uuid.UUID) -> dict
         "GROUP BY c.name ORDER BY units DESC"
     ), {"d": design_id})).mappings().all()
 
-    from theseus.planks.maker.insights import MakerInsights
     insights = MakerInsights(session=session)
     make_more = await insights.make_more(design_id)
-    promote: list[dict[str, Any]] = []  # stub — replaced in Task 10
+    promote = await insights.promotion_candidates(design_id)
     version_rows: list[dict[str, Any]] = []
     for pv in product_views:
         version_rows.append({"product": pv["name"],

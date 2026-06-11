@@ -78,6 +78,32 @@ class MakerInsights:
                         "nudge": f"{r['name']}: {on_hand:g} on hand (reorder at {reorder:g})"})
         return out
 
+    async def promotion_candidates(self, design_id: uuid.UUID) -> list[dict[str, Any]]:
+        product_ids = (await self._session.execute(text(
+            "SELECT id FROM maker_product WHERE design_id = :d"), {"d": design_id})).scalars().all()
+        out: list[dict[str, Any]] = []
+        for pid in product_ids:
+            current = (await self._session.execute(text(
+                "SELECT id FROM maker_product_version WHERE product_id = :p AND status = 'current'"
+            ), {"p": pid})).mappings().one_or_none()
+            draft = (await self._session.execute(text(
+                "SELECT id, number FROM maker_product_version "
+                "WHERE product_id = :p AND status = 'draft' ORDER BY number LIMIT 1"
+            ), {"p": pid})).mappings().one_or_none()
+            if current is None or draft is None:
+                continue
+            var_ids = (await self._session.execute(text(
+                "SELECT id FROM maker_variation WHERE product_version_id = :v"
+            ), {"v": current["id"]})).scalars().all()
+            total = 0.0
+            for vid in var_ids:
+                total += await self._svc.variation_on_hand(vid)
+            if total > 0:
+                continue
+            out.append({"product_id": str(pid), "current_version_id": str(current["id"]),
+                        "draft_version_id": str(draft["id"]), "draft_number": draft["number"]})
+        return out
+
     async def version_compare(self, product_id: uuid.UUID) -> list[dict[str, Any]]:
         rows = (await self._session.execute(text(
             "SELECT pv.id, pv.number, pv.status, "

@@ -108,3 +108,30 @@ async def test_version_compare_zero_sales_returns_zero(db_session) -> None:
         "SELECT id FROM maker_product WHERE design_id = :d"), {"d": design_id})).scalar()
     rows = await MakerInsights(session=db_session).version_compare(product_id)
     assert rows and rows[0]["units"] == 0.0 and rows[0]["revenue"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_promotion_candidate_when_current_sold_out_and_draft_exists(db_session) -> None:
+    # current version produced 2, sold 2 -> on_hand 0; add a draft version
+    design_id, _vid = await _design_with_variation(db_session, on_hand=2, reorder=0, sold=2)
+    product_id = (await db_session.execute(text(
+        "SELECT id FROM maker_product WHERE design_id = :d"), {"d": design_id})).scalar()
+    draft = uuid.uuid4()
+    await db_session.execute(text(
+        "INSERT INTO maker_product_version (id, number, status, product_id) "
+        "VALUES (:i, 2, 'draft', :p)"), {"i": draft, "p": product_id})
+    await db_session.flush()
+    cands = await MakerInsights(session=db_session).promotion_candidates(design_id)
+    assert any(c["draft_version_id"] == str(draft) for c in cands)
+
+
+@pytest.mark.asyncio
+async def test_no_promotion_candidate_when_stock_remains(db_session) -> None:
+    design_id, _ = await _design_with_variation(db_session, on_hand=10, reorder=0, sold=1)
+    product_id = (await db_session.execute(text(
+        "SELECT id FROM maker_product WHERE design_id = :d"), {"d": design_id})).scalar()
+    await db_session.execute(text(
+        "INSERT INTO maker_product_version (id, number, status, product_id) "
+        "VALUES (:i, 2, 'draft', :p)"), {"i": uuid.uuid4(), "p": product_id})
+    await db_session.flush()
+    assert await MakerInsights(session=db_session).promotion_candidates(design_id) == []
