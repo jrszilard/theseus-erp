@@ -1,0 +1,7 @@
+{% import 'primitives.html' as ui %}
+{% call ui.modal('cmdk', title='Search') %}{% endcall %}
+<template id="cmdk-body">
+  <input class="input" type="search" name="q" placeholder="Search designs…"
+         hx-get="/search" hx-trigger="keyup changed delay:200ms" hx-target="#cmdk-results" autofocus>
+  <div id="cmdk-results"></div>
+</template>

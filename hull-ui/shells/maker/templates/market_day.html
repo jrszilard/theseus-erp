@@ -20,10 +20,12 @@
 {% endcall %}
 
 {% call ui.card(title='Tap-to-tally') %}
-  <div class="tally-grid" data-market="{{ market.id }}">
+  <div class="tally-grid" data-market="{{ market.id }}" data-channel="{{ default_channel_id }}">
     {% for v in market.variations %}{{ mk.tally_tile(v) }}{% endfor %}
   </div>
-  <p class="muted">Tap to tally during the market; "Done" commits the session (wired in a later update).</p>
+  {{ ui.button('Done — commit session', variant='primary',
+       attrs='data-tally-commit="/markets/' ~ market.id ~ '/tally" data-channel="' ~ default_channel_id ~ '"') }}
+  <p class="muted">Tap to tally during the market; "Done" commits the session in one POST.</p>
 {% endcall %}
 
 {% call ui.card(title='Tell the Shipwright') %}

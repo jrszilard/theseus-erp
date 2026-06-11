@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import uuid
 from typing import TYPE_CHECKING
 
@@ -96,6 +97,33 @@ async def market_sale(request: Request, market_event_id: uuid.UUID,
         "VALUES (:i, :q, :p, 0, now(), 'manual', :v, :c, :m)"
     ), {"i": sale_id, "q": quantity, "p": unit_price,
         "v": variation_id, "c": channel_id, "m": market_event_id})
+    await session.commit()
+    view = await read_models.get_market_day(session, market_event_id)
+    return templates.TemplateResponse(request, "partials/_market_lines.html", {"market": view})
+
+
+@router.get("/search", response_class=HTMLResponse)
+async def search(request: Request, q: str = "",
+                 session: AsyncSession = Depends(get_session)) -> HTMLResponse:  # noqa: B008
+    results = await read_models.search_designs(session, q) if q else []
+    return templates.TemplateResponse(
+        request, "partials/_command_results.html", {"results": results}
+    )
+
+
+@router.post("/markets/{market_event_id}/tally", response_class=HTMLResponse)
+async def market_tally(request: Request, market_event_id: uuid.UUID,
+                       session_data: str = Form(..., alias="session"),
+                       session: AsyncSession = Depends(get_session)) -> HTMLResponse:  # noqa: B008
+    lines = json.loads(session_data)
+    for ln in lines:
+        await session.execute(text(
+            "INSERT INTO maker_sale (id, quantity, unit_price, fees, sale_date, source, "
+            "variation_id, channel_id, market_event_id) "
+            "VALUES (:i, :q, :p, 0, now(), 'tally', :v, :c, :m)"
+        ), {"i": uuid.uuid4(), "q": float(ln["quantity"]), "p": float(ln["unit_price"]),
+            "v": uuid.UUID(ln["variation_id"]), "c": uuid.UUID(ln["channel_id"]),
+            "m": market_event_id})
     await session.commit()
     view = await read_models.get_market_day(session, market_event_id)
     return templates.TemplateResponse(request, "partials/_market_lines.html", {"market": view})

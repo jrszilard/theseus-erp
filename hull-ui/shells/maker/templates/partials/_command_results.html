@@ -1,0 +1,4 @@
+<ul class="cmdk-results">
+  {% for d in results %}<li><a href="/designs/{{ d.id }}">{{ d.title }}</a></li>
+  {% else %}<li class="muted">No matches.</li>{% endfor %}
+</ul>

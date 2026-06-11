@@ -161,6 +161,13 @@ async def list_markets(session: AsyncSession) -> list[dict[str, Any]]:
              "gross": float(r["gross"] or 0)} for r in rows]
 
 
+async def search_designs(session: AsyncSession, q: str) -> list[dict[str, Any]]:
+    rows = (await session.execute(text(
+        "SELECT id, title FROM maker_design WHERE title ILIKE :q ORDER BY title LIMIT 10"
+    ), {"q": f"%{q}%"})).mappings().all()
+    return [{"id": str(r["id"]), "title": r["title"]} for r in rows]
+
+
 async def get_market_day(
         session: AsyncSession, market_event_id: uuid.UUID) -> dict[str, Any] | None:
     me = (await session.execute(text(
