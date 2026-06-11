@@ -1,0 +1,19 @@
+{% import 'primitives.html' as ui %}
+<form class="capture-confirm" data-capture-commit="/markets/{{ market.id }}/capture/commit">
+  {% if lines %}
+  <table class="var-table"><tbody>
+    {% for ln in lines %}
+    <tr data-capture-line data-variation="{{ ln.variation_id }}">
+      <td>{{ ln.label }}</td>
+      <td>{{ ui.input(name='quantity', value=ln.quantity|string, type='number') }}</td>
+      <td>{{ ui.input(name='unit_price',
+            value=(ln.unit_price if ln.unit_price is not none else '')|string,
+            type='number', placeholder='price') }}</td>
+    </tr>
+    {% endfor %}
+  </tbody></table>
+  {{ ui.button('Confirm & record', variant='primary', type='button', attrs='data-capture-submit') }}
+  {% else %}
+  <p class="muted">Couldn't read that — try tap-to-tally or the manual form.</p>
+  {% endif %}
+</form>

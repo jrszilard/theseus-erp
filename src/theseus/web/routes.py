@@ -9,6 +9,8 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import text
 
 from theseus.database import get_session
+from theseus.keel.llm_gateway.gateway import LLMGateway
+from theseus.planks.maker.capture import llm_available, parse_sale_text
 from theseus.planks.maker.service import MakerService
 from theseus.web import read_models
 from theseus.web.templating import templates
@@ -89,6 +91,7 @@ async def market_day(request: Request, market_event_id: uuid.UUID,
     return templates.TemplateResponse(request, "market_day.html", {
         "market": view, "variation_options": options,
         "default_channel_id": str(default_channel) if default_channel else "",
+        "llm_ready": llm_available(),
     })
 
 
@@ -144,6 +147,45 @@ async def market_tally(request: Request, market_event_id: uuid.UUID,
             quantity=p.quantity, unit_price=p.unit_price,
             source="tally", market_event_id=market_event_id,
         )
+    await session.commit()
+    view = await read_models.get_market_day(session, market_event_id)
+    return templates.TemplateResponse(request, "partials/_market_lines.html", {"market": view})
+
+
+@router.post("/markets/{market_event_id}/capture/parse", response_class=HTMLResponse)
+async def capture_parse(request: Request, market_event_id: uuid.UUID,
+                        natural: str = Form(...),
+                        session: AsyncSession = Depends(get_session)) -> HTMLResponse:  # noqa: B008
+    view = await read_models.get_market_day(session, market_event_id)
+    if view is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="market not found")
+    lines = await parse_sale_text(natural, view["variations"], LLMGateway())
+    return templates.TemplateResponse(request, "partials/_capture_confirm.html",
+                                      {"market": view, "lines": lines})
+
+
+@router.post("/markets/{market_event_id}/capture/commit", response_class=HTMLResponse)
+async def capture_commit(request: Request, market_event_id: uuid.UUID,
+                         lines_json: str = Form(..., alias="lines"),
+                         session: AsyncSession = Depends(get_session)) -> HTMLResponse:  # noqa: B008
+    try:
+        items = json.loads(lines_json)
+        parsed = [(uuid.UUID(i["variation_id"]), float(i["quantity"]), float(i["unit_price"]))
+                  for i in items]
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError) as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail="invalid capture payload") from exc
+    channel_raw = (await session.execute(
+        text("SELECT id FROM maker_channel ORDER BY created_at LIMIT 1"))).scalar()
+    if channel_raw is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail="no channel configured")
+    channel: uuid.UUID = uuid.UUID(str(channel_raw))
+    svc = MakerService(session=session)
+    for variation_id, quantity, unit_price in parsed:
+        await svc.record_sale(variation_id=variation_id, channel_id=channel,
+                              quantity=quantity, unit_price=unit_price,
+                              source="shipwright_nl", market_event_id=market_event_id)
     await session.commit()
     view = await read_models.get_market_day(session, market_event_id)
     return templates.TemplateResponse(request, "partials/_market_lines.html", {"market": view})

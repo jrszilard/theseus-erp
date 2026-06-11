@@ -29,7 +29,14 @@
 {% endcall %}
 
 {% call ui.card(title='Tell the Shipwright') %}
-  {{ ui.textarea(name='natural', placeholder='e.g. sold 12 loon stickers and 3 magnets') }}
-  <p class="muted">Natural-language capture arrives with the Shipwright (Plan 4).</p>
+  {% if llm_ready %}
+  <form hx-post="/markets/{{ market.id }}/capture/parse" hx-target="#capture-confirm" hx-swap="innerHTML">
+    {{ ui.textarea(name='natural', placeholder='e.g. sold 12 loon stickers and 3 magnets') }}
+    {{ ui.button('Parse', variant='primary', type='submit') }}
+  </form>
+  <div id="capture-confirm"></div>
+  {% else %}
+  <p class="muted">Natural-language capture needs an AI provider configured. Tap-to-tally and manual work without it.</p>
+  {% endif %}
 {% endcall %}
 {% endblock %}
