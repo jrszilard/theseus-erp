@@ -166,6 +166,16 @@ class MakerService:
             return 0.0
         return float(total_cost / total_qty)
 
+    # ---- internal helpers ----
+
+    async def _get_variation_row(self, variation_id: uuid.UUID) -> Any:
+        """Fetch a variation's recipe_id + finished_stock_id, or None if it doesn't exist."""
+        result = await self._session.execute(
+            text("SELECT recipe_id, finished_stock_id FROM maker_variation WHERE id = :id"),
+            {"id": variation_id},
+        )
+        return result.mappings().one_or_none()
+
     # ---- costing ----
 
     async def unit_cogs(self, variation_id: uuid.UUID) -> float:
@@ -174,10 +184,7 @@ class MakerService:
         Labor cost = (labor_minutes / 60) x labor_rate_per_hour. Returns 0.0 when the
         variation has no recipe attached.
         """
-        var = await self._session.execute(
-            text("SELECT recipe_id FROM maker_variation WHERE id = :id"), {"id": variation_id}
-        )
-        var_row = var.mappings().one_or_none()
+        var_row = await self._get_variation_row(variation_id)
         if var_row is None or var_row["recipe_id"] is None:
             return 0.0
         recipe_id = var_row["recipe_id"]
@@ -206,10 +213,7 @@ class MakerService:
     async def buildable_now(self, variation_id: uuid.UUID) -> int:
         """How many units can be made right now = min over recipe lines of
         floor(material on-hand / qty_per_unit). 0 if no recipe or no lines."""
-        var = await self._session.execute(
-            text("SELECT recipe_id FROM maker_variation WHERE id = :id"), {"id": variation_id}
-        )
-        var_row = var.mappings().one_or_none()
+        var_row = await self._get_variation_row(variation_id)
         if var_row is None or var_row["recipe_id"] is None:
             return 0
 
@@ -235,14 +239,10 @@ class MakerService:
 
     async def variation_on_hand(self, variation_id: uuid.UUID) -> float:
         """Finished-good stock for a variation = stock level of its finished_stock item."""
-        var = await self._session.execute(
-            text("SELECT finished_stock_id FROM maker_variation WHERE id = :id"),
-            {"id": variation_id},
-        )
-        row = var.mappings().one_or_none()
-        if row is None or row["finished_stock_id"] is None:
+        var_row = await self._get_variation_row(variation_id)
+        if var_row is None or var_row["finished_stock_id"] is None:
             return 0.0
-        return await self._inventory.get_stock_level(row["finished_stock_id"])
+        return await self._inventory.get_stock_level(var_row["finished_stock_id"])
 
     async def run_production(
         self, *, variation_id: uuid.UUID, quantity: float, warehouse_id: uuid.UUID
@@ -250,11 +250,7 @@ class MakerService:
         """Make `quantity` units: snapshot unit COGS, consume each material, add finished
         stock, and write an immutable production-run record. Does not block on shortage —
         callers use buildable_now() as the advisory guard."""
-        var = await self._session.execute(
-            text("SELECT recipe_id, finished_stock_id FROM maker_variation WHERE id = :id"),
-            {"id": variation_id},
-        )
-        var_row = var.mappings().one_or_none()
+        var_row = await self._get_variation_row(variation_id)
         if var_row is None:
             msg = f"Variation {variation_id} not found"
             raise ValueError(msg)

@@ -274,3 +274,18 @@ async def test_run_production_snapshot_is_immune_to_later_price_changes(db_sessi
         {"id": uuid.UUID(run["id"])},
     )
     assert float(row.scalar()) == pytest.approx(0.20)
+
+
+@pytest.mark.asyncio
+async def test_run_production_without_recipe_adds_stock_zero_cogs(db_session) -> None:
+    svc = MakerService(session=db_session)
+    wh = await svc._inventory.create_warehouse(name="StudioNR", code="STUDIONR")
+    finished = await svc.create_finished_good(sku="FG-NR", name="Handmade Original")
+    variation = await svc.create_variation(
+        sku="VAR-NR", base_price=50.0, finished_stock_id=uuid.UUID(finished["id"]),
+    )  # no recipe_id
+    vid = uuid.UUID(variation["id"])
+    run = await svc.run_production(variation_id=vid, quantity=3, warehouse_id=uuid.UUID(wh["id"]))
+    assert run["unit_cogs_snapshot"] == pytest.approx(0.0)
+    assert run["total_cogs"] == pytest.approx(0.0)
+    assert await svc.variation_on_hand(vid) == 3.0
