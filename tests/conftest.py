@@ -43,7 +43,7 @@ async def test_engine():
         bp = parser.parse_file(SIMPLE_FIXTURE)
         generator.generate_table(bp)
 
-    # Register all Plank Blueprints in sorted order (contacts < inventory < invoicing)
+    # Register all Plank Blueprints in sorted order (contacts < inventory < invoicing < maker)
     # so FK target tables are in the metadata before tables that reference them.
     # All tables are registered first, then create_all is called once at the end.
     if PLANKS_DIR.exists():

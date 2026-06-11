@@ -1,0 +1,27 @@
+plank: maker
+entity: Listing
+version: 1
+description: A Variation offered on a Channel at a price
+
+fields:
+  price:
+    type: decimal
+    required: true
+  url:
+    type: string
+  status:
+    type: enum
+    values: [draft, active, ended]
+    default: draft
+  pricing_tier:
+    type: enum
+    values: [retail, wholesale]
+    default: retail
+
+relations:
+  variation:
+    type: many_to_one
+    target: maker.Variation
+  channel:
+    type: many_to_one
+    target: maker.Channel

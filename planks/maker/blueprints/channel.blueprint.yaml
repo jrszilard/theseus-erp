@@ -1,0 +1,19 @@
+plank: maker
+entity: Channel
+version: 1
+description: A sales channel (Etsy, eBay, in-person...) with a fee model — extensible lookup
+
+fields:
+  name:
+    type: string
+    required: true
+    unique: true
+  fee_percent:
+    type: decimal
+    default: 0
+  fee_fixed:
+    type: decimal
+    default: 0
+  is_active:
+    type: boolean
+    default: true

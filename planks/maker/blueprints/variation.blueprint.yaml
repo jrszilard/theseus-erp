@@ -1,0 +1,33 @@
+plank: maker
+entity: Variation
+version: 1
+description: A sellable SKU (size/finish) under a ProductVersion
+
+fields:
+  sku:
+    type: string
+    unique: true
+  attributes:
+    type: json
+  base_price:
+    type: decimal
+  on_hand:
+    type: decimal
+    computed: true
+  unit_cogs:
+    type: decimal
+    computed: true
+
+relations:
+  product_version:
+    type: many_to_one
+    target: maker.ProductVersion
+  finished_stock:
+    type: one_to_one
+    target: inventory.StockItem
+  recipe:
+    type: one_to_one
+    target: maker.Recipe
+  listings:
+    type: one_to_many
+    target: maker.Listing

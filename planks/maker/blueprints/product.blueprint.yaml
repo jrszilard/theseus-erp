@@ -1,0 +1,20 @@
+plank: maker
+entity: Product
+version: 1
+description: A Design realized in a specific Format ("Loon Sticker")
+
+fields:
+  name:
+    type: string
+    required: true
+
+relations:
+  design:
+    type: many_to_one
+    target: maker.Design
+  format:
+    type: many_to_one
+    target: maker.Format
+  versions:
+    type: one_to_many
+    target: maker.ProductVersion

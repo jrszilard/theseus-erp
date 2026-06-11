@@ -1,0 +1,29 @@
+plank: maker
+entity: Design
+version: 1
+description: A creative idea/motif that fans out into product formats
+
+fields:
+  title:
+    type: string
+    required: true
+  slug:
+    type: string
+    unique: true
+  status:
+    type: enum
+    values: [idea, in_progress, released, retired]
+    default: idea
+  themes:
+    type: json
+  source_art:
+    type: file
+    multiple: true
+  writing:
+    type: file
+    multiple: true
+
+relations:
+  products:
+    type: one_to_many
+    target: maker.Product

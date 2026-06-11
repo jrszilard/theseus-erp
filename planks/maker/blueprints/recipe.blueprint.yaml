@@ -1,0 +1,17 @@
+plank: maker
+entity: Recipe
+version: 1
+description: The bill of materials + labor to make one unit of a Variation
+
+fields:
+  labor_minutes:
+    type: decimal
+    default: 0
+  labor_rate_per_hour:
+    type: decimal
+    default: 0
+
+relations:
+  lines:
+    type: one_to_many
+    target: maker.RecipeLine

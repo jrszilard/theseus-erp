@@ -1,0 +1,22 @@
+plank: maker
+entity: MarketEvent
+version: 1
+description: An in-person market/day that groups sales for booth-aware P&L
+
+fields:
+  name:
+    type: string
+    required: true
+  event_date:
+    type: date
+    required: true
+  location:
+    type: string
+  booth_fee:
+    type: decimal
+    default: 0
+
+relations:
+  sales:
+    type: one_to_many
+    target: maker.Sale

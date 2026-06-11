@@ -1,0 +1,29 @@
+plank: maker
+entity: ProductVersion
+version: 1
+description: A revision of a Product; the unit of "which version sells better"
+
+fields:
+  number:
+    type: integer
+    required: true
+  status:
+    type: enum
+    values: [draft, current, retired]
+    default: draft
+  notes:
+    type: text
+  production_files:
+    type: file
+    multiple: true
+  mockups:
+    type: file
+    multiple: true
+
+relations:
+  product:
+    type: many_to_one
+    target: maker.Product
+  variations:
+    type: one_to_many
+    target: maker.Variation

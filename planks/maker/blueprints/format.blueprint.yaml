@@ -1,0 +1,15 @@
+plank: maker
+entity: Format
+version: 1
+description: A product format type (sticker, print, magnet...) — user-extensible lookup
+
+fields:
+  name:
+    type: string
+    required: true
+    unique: true
+  default_unit:
+    type: string
+    default: "each"
+  icon:
+    type: string

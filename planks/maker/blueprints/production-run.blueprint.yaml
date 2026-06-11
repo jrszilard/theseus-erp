@@ -1,0 +1,23 @@
+plank: maker
+entity: ProductionRun
+version: 1
+description: A record of making N units of a Variation — consumes materials, adds finished stock, snapshots COGS
+
+fields:
+  quantity:
+    type: decimal
+    required: true
+  unit_cogs_snapshot:
+    type: decimal
+    required: true
+  total_cogs:
+    type: decimal
+    required: true
+  run_date:
+    type: datetime
+    required: true
+
+relations:
+  variation:
+    type: many_to_one
+    target: maker.Variation

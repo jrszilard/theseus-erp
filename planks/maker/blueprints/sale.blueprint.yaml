@@ -1,0 +1,33 @@
+plank: maker
+entity: Sale
+version: 1
+description: A sale of a Variation on a Channel (per-order or batch)
+
+fields:
+  quantity:
+    type: decimal
+    required: true
+  unit_price:
+    type: decimal
+    required: true
+  fees:
+    type: decimal
+    default: 0
+  sale_date:
+    type: datetime
+    required: true
+  source:
+    type: enum
+    values: [shipwright_nl, tally, manual, import]
+    default: manual
+
+relations:
+  variation:
+    type: many_to_one
+    target: maker.Variation
+  channel:
+    type: many_to_one
+    target: maker.Channel
+  market_event:
+    type: many_to_one
+    target: maker.MarketEvent

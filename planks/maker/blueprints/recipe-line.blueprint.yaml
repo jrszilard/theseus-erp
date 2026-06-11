@@ -1,0 +1,17 @@
+plank: maker
+entity: RecipeLine
+version: 1
+description: One material requirement in a Variation's recipe
+
+fields:
+  qty_per_unit:
+    type: decimal
+    required: true
+
+relations:
+  recipe:
+    type: many_to_one
+    target: maker.Recipe
+  material:
+    type: many_to_one
+    target: inventory.StockItem
