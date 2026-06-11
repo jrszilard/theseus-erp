@@ -76,7 +76,10 @@ async def bom_run(request: Request, variation_id: uuid.UUID,
 async def promote_version_route(design_id: uuid.UUID, version_id: uuid.UUID,
                                 session: AsyncSession = Depends(get_session)) -> RedirectResponse:  # noqa: B008
     svc = MakerService(session=session)
-    await svc.promote_version(version_id)
+    try:
+        await svc.promote_version(version_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     await session.commit()
     return RedirectResponse(f"/designs/{design_id}", status_code=status.HTTP_303_SEE_OTHER)
 

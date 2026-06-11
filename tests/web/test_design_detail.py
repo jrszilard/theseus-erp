@@ -59,3 +59,11 @@ async def test_promote_route_flips_version(client, db_session, maker_seed) -> No
 async def test_design_detail_shows_sales_by_version(client, maker_seed) -> None:
     resp = await client.get(f"/designs/{maker_seed['design_id']}")
     assert "by version" in resp.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_promote_route_stale_version_returns_409(client, maker_seed) -> None:
+    import uuid as _uuid
+    did = maker_seed["design_id"]
+    resp = await client.post(f"/designs/{did}/versions/{_uuid.uuid4()}/promote")
+    assert resp.status_code == 409
