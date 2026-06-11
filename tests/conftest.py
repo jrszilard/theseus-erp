@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import (
 
 from theseus.api.dependencies import set_registry
 from theseus.database import Base, get_session
+import theseus.keel.assets.models  # noqa: F401
+import theseus.keel.event_store.models  # noqa: F401
 import theseus.shipwright.conversation.models  # noqa: F401
 from theseus.keel.blueprint_engine.parser import BlueprintFileParser
 from theseus.keel.blueprint_engine.registry import BlueprintRegistry
@@ -34,7 +36,7 @@ async def test_engine():
         await conn.run_sync(Base.metadata.create_all)
 
     parser = BlueprintFileParser()
-    generator = SchemaGenerator()
+    generator = SchemaGenerator(metadata=Base.metadata)
 
     # Register the simple test fixture
     if SIMPLE_FIXTURE.exists():

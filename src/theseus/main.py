@@ -9,7 +9,9 @@ from fastapi import FastAPI
 from theseus.api.dependencies import set_registry
 from theseus.api.middleware import RequestLoggingMiddleware
 from theseus.api.routes import assets, entities, health, shipwright
-from theseus.database import async_session_factory, engine
+from theseus.database import Base, async_session_factory, engine
+import theseus.keel.assets.models  # noqa: F401
+import theseus.keel.event_store.models  # noqa: F401
 from theseus.keel.blueprint_engine.parser import BlueprintFileParser
 from theseus.keel.blueprint_engine.registry import BlueprintRegistry
 from theseus.keel.knowledge_graph.graph import PostgresKnowledgeGraph
@@ -35,12 +37,12 @@ async def lifespan(app: FastAPI):
 
     set_registry(registry)
 
-    generator = SchemaGenerator()
+    generator = SchemaGenerator(metadata=Base.metadata)
     for bp in registry.all():
-        table = generator.generate_table(bp)
-        async with engine.begin() as conn:
-            await conn.run_sync(table.metadata.create_all, checkfirst=True)
-        logger.info("Ensured table exists: %s", bp.table_name)
+        generator.generate_table(bp)
+        logger.info("Generated table: %s", bp.table_name)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all, checkfirst=True)
 
     # Register all entity types and relationships in the Knowledge Graph
     async with async_session_factory() as session:

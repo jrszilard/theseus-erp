@@ -1,4 +1,7 @@
 import pytest
+from sqlalchemy import text
+from theseus.database import Base
+import theseus.keel.assets.models  # noqa: F401
 from theseus.keel.blueprint_engine.models import (
     Blueprint, BlueprintField, BlueprintRelation, FieldType, RelationType,
 )
@@ -133,3 +136,39 @@ def test_multiple_file_field_creates_junction_table() -> None:
     junction = metadata.tables["maker_design_source_art"]
     assert "asset_id" in junction.c
     assert "maker_design_id" in junction.c
+
+
+@pytest.mark.asyncio
+async def test_file_field_blueprint_creates_against_assets(test_engine) -> None:
+    from theseus.keel.blueprint_engine.models import Blueprint, BlueprintField, FieldType
+    from theseus.keel.schema_engine.generator import SchemaGenerator
+
+    bp = Blueprint(
+        plank="exp", entity="FileThing", version=1, description="exercises file FK",
+        fields={
+            "title": BlueprintField(type=FieldType.STRING, required=True),
+            "cover": BlueprintField(type=FieldType.FILE),
+            "gallery": BlueprintField(type=FieldType.FILE, multiple=True),
+        },
+    )
+    generator = SchemaGenerator(metadata=Base.metadata)
+    generator.generate_table(bp)
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all, checkfirst=True)
+        regclass = await conn.run_sync(
+            lambda c: c.execute(text("SELECT to_regclass('exp_file_thing')")).scalar()
+        )
+    assert regclass is not None
+    # single-file FK column + multi-file junction table both exist
+    async with test_engine.begin() as conn:
+        col = await conn.run_sync(
+            lambda c: c.execute(text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name='exp_file_thing' AND column_name='cover_asset_id'"
+            )).scalar()
+        )
+        junction = await conn.run_sync(
+            lambda c: c.execute(text("SELECT to_regclass('exp_file_thing_gallery')")).scalar()
+        )
+    assert col == 1
+    assert junction is not None
