@@ -1,0 +1,19 @@
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  line-height: var(--leading);
+}
+a { color: var(--color-primary); text-decoration: none; }
+.app-bar {
+  display: flex; align-items: center; gap: var(--space-6);
+  padding: var(--space-3) var(--space-6);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+.brand { font-weight: var(--weight-bold); }
+.app-nav { display: flex; gap: var(--space-4); }
+.app-main { padding: var(--space-6); }

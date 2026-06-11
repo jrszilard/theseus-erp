@@ -1,0 +1,37 @@
+:root {
+  /* color roles (light defaults) */
+  --color-bg: #faf9f7;
+  --color-surface: #ffffff;
+  --color-border: #e6e2dc;
+  --color-text: #2a2722;
+  --color-text-muted: #6b6459;
+  --color-primary: #2f6f6a;
+  --color-on-primary: #ffffff;
+  --color-success: #2e7d4f;
+  --color-warning: #b5751a;
+  --color-danger: #b3402f;
+  --overlay: rgba(0,0,0,0.4);
+
+  /* typography */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --text-xs: 0.75rem; --text-sm: 0.875rem; --text-md: 1rem;
+  --text-lg: 1.25rem; --text-xl: 1.75rem;
+  --weight-regular: 400; --weight-medium: 600; --weight-bold: 700;
+  --leading: 1.5;
+
+  /* spacing scale (density multiplier applied in density.css) */
+  --space-unit: 1;
+  --space-1: calc(0.25rem * var(--space-unit));
+  --space-2: calc(0.5rem * var(--space-unit));
+  --space-3: calc(0.75rem * var(--space-unit));
+  --space-4: calc(1rem * var(--space-unit));
+  --space-6: calc(1.5rem * var(--space-unit));
+  --space-8: calc(2rem * var(--space-unit));
+
+  /* sidebar width, radii, shadow, motion */
+  --sw-width: 20rem;
+  --radius-sm: 0.25rem; --radius-md: 0.5rem; --radius-lg: 0.75rem;
+  --shadow-1: 0 1px 2px rgba(0,0,0,0.06); --shadow-2: 0 4px 12px rgba(0,0,0,0.10);
+  --motion-fast: 120ms ease; --motion-med: 220ms ease;
+}
