@@ -49,6 +49,9 @@ class MakerService:
 
     async def set_reorder_point(self, stock_item_id: uuid.UUID, value: float) -> dict[str, Any]:
         """Update the reorder_point for a stock item (material or finished good)."""
+        if value < 0:
+            msg = "reorder_point must be >= 0"
+            raise ValueError(msg)
         await self._session.execute(
             text("UPDATE inventory_stock_item SET reorder_point = :r WHERE id = :i"),
             {"r": value, "i": stock_item_id},

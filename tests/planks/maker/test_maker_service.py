@@ -404,3 +404,12 @@ async def test_set_reorder_point_updates_item(db_session) -> None:
         text("SELECT reorder_point FROM inventory_stock_item WHERE id = :i"),
         {"i": _uuid.UUID(mat["id"])})).scalar()
     assert float(rp) == 20
+
+
+@pytest.mark.asyncio
+async def test_set_reorder_point_rejects_negative(db_session) -> None:
+    import uuid as _uuid
+    svc = MakerService(session=db_session)
+    mat = await svc.create_material(sku="RP-NEG", name="Neg", unit="ml")
+    with pytest.raises(ValueError, match="reorder_point"):
+        await svc.set_reorder_point(_uuid.UUID(mat["id"]), -5)

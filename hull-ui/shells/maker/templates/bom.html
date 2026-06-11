@@ -19,7 +19,7 @@
       <td>
         <form method="post" action="/bom/{{ bom.variation_id }}/reorder" class="reorder-mini">
           <input type="hidden" name="stock_item_id" value="{{ line.material_id }}">
-          <input type="number" name="value" value="{{ line.reorder_point }}" aria-label="low at" class="reorder-input">
+          <input type="number" name="value" value="{{ line.reorder_point }}" aria-label="low at" class="reorder-input" min="0" step="any">
           <button class="btn" type="submit">low at</button>
         </form>
       </td>
@@ -34,7 +34,7 @@
 {% call ui.card(title='Reorder threshold — finished stock') %}
   <form method="post" action="/bom/{{ bom.variation_id }}/reorder" class="reorder-mini">
     <input type="hidden" name="stock_item_id" value="{{ bom.finished_stock_id }}">
-    <input type="number" name="value" value="{{ bom.finished_reorder_point }}" aria-label="finished low at" class="reorder-input">
+    <input type="number" name="value" value="{{ bom.finished_reorder_point }}" aria-label="finished low at" class="reorder-input" min="0" step="any">
     <button class="btn" type="submit">low at</button>
   </form>
 {% endcall %}
