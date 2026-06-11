@@ -29,3 +29,12 @@ async def test_design_detail_shows_variation_metrics(client, maker_seed) -> None
 async def test_design_detail_404_for_unknown(client) -> None:
     resp = await client.get(f"/designs/{uuid.uuid4()}")
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_design_detail_shows_make_more_nudge(client, db_session, maker_seed) -> None:
+    # the seed's 8x10 has sales in 60d -> a make-more nudge appears in the sidebar
+    resp = await client.get(f"/designs/{maker_seed['design_id']}")
+    assert resp.status_code == 200
+    assert "Shipwright" in resp.text
+    assert "buildable" in resp.text.lower() or "on hand" in resp.text.lower()

@@ -1,0 +1,17 @@
+{% if design.promote %}
+  {% for c in design.promote %}
+  <form class="sw-bubble sw-warn" method="post"
+        action="/designs/{{ design.id }}/versions/{{ c.draft_version_id }}/promote">
+    <p>A version sold out — promote v{{ c.draft_number }} to current?</p>
+    <button class="btn btn-primary" type="submit">Promote v{{ c.draft_number }}</button>
+  </form>
+  {% endfor %}
+{% endif %}
+{% if design.make_more %}
+  {% for m in design.make_more %}
+  <div class="sw-bubble {% if m.running_low %}sw-warn{% else %}sw-info{% endif %}">{{ m.nudge }}</div>
+  {% endfor %}
+{% endif %}
+{% if not design.promote and not design.make_more %}
+  <div class="sw-bubble sw-info">All caught up — no make-more or restock nudges.</div>
+{% endif %}

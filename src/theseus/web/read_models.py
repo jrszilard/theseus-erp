@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import uuid  # noqa: TC003
+import uuid
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import text
@@ -94,10 +94,22 @@ async def get_design_detail(session: AsyncSession, design_id: uuid.UUID) -> dict
         "GROUP BY c.name ORDER BY units DESC"
     ), {"d": design_id})).mappings().all()
 
+    from theseus.planks.maker.insights import MakerInsights
+    insights = MakerInsights(session=session)
+    make_more = await insights.make_more(design_id)
+    promote: list[dict[str, Any]] = []  # stub — replaced in Task 10
+    version_rows: list[dict[str, Any]] = []
+    for pv in product_views:
+        version_rows.append({"product": pv["name"],
+                             "versions": await insights.version_compare(uuid.UUID(pv["id"]))})
+
     return {
         "id": str(design["id"]), "title": design["title"], "status": design["status"],
         "products": product_views,
         "channels": [{"label": c["channel"], "value": float(c["units"])} for c in channels],
+        "make_more": make_more,
+        "promote": promote,
+        "version_compare": version_rows,
     }
 
 
