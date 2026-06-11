@@ -37,4 +37,8 @@ async def test_design_detail_shows_make_more_nudge(client, db_session, maker_see
     resp = await client.get(f"/designs/{maker_seed['design_id']}")
     assert resp.status_code == 200
     assert "Shipwright" in resp.text
-    assert "buildable" in resp.text.lower() or "on hand" in resp.text.lower()
+    # "buildable" appears ONLY in the make_more nudge on this page (the variation table
+    # says "sold · on hand", not "buildable") — so this proves the sidebar insight rendered.
+    assert "buildable" in resp.text.lower()
+    # the inert Plan-3 placeholder must be gone now that real insights render
+    assert "later update" not in resp.text.lower()
