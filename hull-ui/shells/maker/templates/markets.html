@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block title %}Markets — Maker Edition{% endblock %}
+{% block content %}
+<h1>Markets</h1>
+<ul class="market-list">
+  {% for m in markets %}
+  <li><a href="/markets/{{ m.id }}">🎪 {{ m.name }}</a>
+      <span class="muted">{{ m.date }} · booth ${{ '%.0f'|format(m.booth_fee) }} · gross ${{ '%.0f'|format(m.gross) }}</span></li>
+  {% else %}<li class="muted">No markets yet.</li>{% endfor %}
+</ul>
+{% endblock %}

@@ -147,3 +147,48 @@ async def get_bom_view(session: AsyncSession, variation_id: uuid.UUID) -> dict[s
         "price": price, "profit": profit,
         "margin": (profit / price * 100) if price else 0,
     }
+
+
+async def list_markets(session: AsyncSession) -> list[dict[str, Any]]:
+    rows = (await session.execute(text(
+        "SELECT me.id, me.name, me.event_date, me.location, me.booth_fee, "
+        "  COALESCE(SUM(s.quantity * s.unit_price), 0) AS gross "
+        "FROM maker_market_event me LEFT JOIN maker_sale s ON s.market_event_id = me.id "
+        "GROUP BY me.id ORDER BY me.event_date DESC"
+    ))).mappings().all()
+    return [{"id": str(r["id"]), "name": r["name"], "date": str(r["event_date"]),
+             "location": r["location"], "booth_fee": float(r["booth_fee"] or 0),
+             "gross": float(r["gross"] or 0)} for r in rows]
+
+
+async def get_market_day(
+        session: AsyncSession, market_event_id: uuid.UUID) -> dict[str, Any] | None:
+    me = (await session.execute(text(
+        "SELECT id, name, event_date, location, booth_fee FROM maker_market_event WHERE id = :m"
+    ), {"m": market_event_id})).mappings().one_or_none()
+    if me is None:
+        return None
+    svc = MakerService(session=session)
+    sales = (await session.execute(text(
+        "SELECT s.id, s.quantity, s.unit_price, s.variation_id, v.sku "
+        "FROM maker_sale s JOIN maker_variation v ON v.id = s.variation_id "
+        "WHERE s.market_event_id = :m ORDER BY s.sale_date"
+    ), {"m": market_event_id})).mappings().all()
+    lines, gross, cogs_total = [], 0.0, 0.0
+    for s in sales:
+        qty, up = float(s["quantity"]), float(s["unit_price"])
+        gross += qty * up
+        cogs_total += qty * await svc.unit_cogs(s["variation_id"])
+        lines.append({"sku": s["sku"], "qty": qty, "price": up, "total": qty * up})
+    booth = float(me["booth_fee"] or 0)
+    variations = (await session.execute(text(
+        "SELECT v.id, v.sku, v.base_price FROM maker_variation v ORDER BY v.sku"
+    ))).mappings().all()
+    return {
+        "id": str(me["id"]), "name": me["name"], "date": str(me["event_date"]),
+        "location": me["location"], "booth_fee": booth, "lines": lines,
+        "gross": gross, "take_home": gross - booth, "cogs": cogs_total,
+        "true_profit": gross - booth - cogs_total,
+        "variations": [{"id": str(v["id"]), "label": v["sku"], "price": float(v["base_price"] or 0)}
+                       for v in variations],
+    }

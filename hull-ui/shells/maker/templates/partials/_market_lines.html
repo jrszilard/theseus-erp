@@ -1,0 +1,13 @@
+<div id="market-lines">
+  <table class="market-table">
+    <thead><tr><td>item</td><td>qty</td><td>price</td><td>total</td></tr></thead>
+    <tbody>
+      {% for l in market.lines %}
+      <tr><td>{{ l.sku }}</td><td>{{ l.qty|int }}</td><td>${{ '%.2f'|format(l.price) }}</td><td>${{ '%.2f'|format(l.total) }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="pnl">Gross ${{ '%.2f'|format(market.gross) }} − booth ${{ '%.2f'|format(market.booth_fee) }}
+     = <strong>${{ '%.2f'|format(market.take_home) }} take-home</strong>
+     − COGS ${{ '%.2f'|format(market.cogs) }} = <span class="pos">${{ '%.2f'|format(market.true_profit) }} true profit</span></p>
+</div>
