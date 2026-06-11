@@ -4,6 +4,15 @@ import pytest
 
 
 @pytest.mark.asyncio
+async def test_seed_has_draft_version_and_prior_sales(client, db_session, maker_seed) -> None:
+    from sqlalchemy import text
+    assert "draft_version_id" in maker_seed
+    drafts = (await db_session.execute(text(
+        "SELECT COUNT(*) FROM maker_product_version WHERE status = 'draft'"))).scalar()
+    assert drafts >= 1
+
+
+@pytest.mark.asyncio
 async def test_design_detail_shows_variation_metrics(client, maker_seed) -> None:
     resp = await client.get(f"/designs/{maker_seed['design_id']}")
     assert resp.status_code == 200

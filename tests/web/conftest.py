@@ -18,7 +18,7 @@ async def maker_seed(db_session):
         version_id = await _scalar(
             "SELECT pv.id FROM maker_product_version pv "
             "JOIN maker_product p ON p.id = pv.product_id "
-            "WHERE p.design_id = :d",
+            "WHERE p.design_id = :d AND pv.status = 'current'",
             d=existing,
         )
         return {
@@ -44,6 +44,9 @@ async def maker_seed(db_session):
             "warehouse_id": str(
                 await _scalar("SELECT id FROM inventory_warehouse WHERE code = 'SEED-STUDIO'")
             ),
+            "draft_version_id": str(await _scalar(
+                "SELECT id FROM maker_product_version WHERE status='draft' "
+                "AND product_id=(SELECT id FROM maker_product WHERE design_id=:d)", d=existing)),
         }
 
     # --- fresh insert path ---
@@ -136,6 +139,11 @@ async def maker_seed(db_session):
         {"i": uuid.uuid4(), "v": var_id, "c": ch_id, "m": me_id},
     )
 
+    draft_version_id = uuid.uuid4()
+    await db_session.execute(text(
+        "INSERT INTO maker_product_version (id, number, status, product_id) "
+        "VALUES (:i, 2, 'draft', :p)"), {"i": draft_version_id, "p": product_id})
+    await svc.set_reorder_point(uuid.UUID(finished["id"]), 5)   # finished good 'low at 5'
     await db_session.flush()
     return {
         "design_id": str(design_id),
@@ -146,4 +154,5 @@ async def maker_seed(db_session):
         "channel_id": str(ch_id),
         "market_event_id": str(me_id),
         "warehouse_id": str(wid),
+        "draft_version_id": str(draft_version_id),
     }
