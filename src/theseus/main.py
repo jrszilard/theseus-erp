@@ -8,7 +8,7 @@ from fastapi import FastAPI
 
 from theseus.api.dependencies import set_registry
 from theseus.api.middleware import RequestLoggingMiddleware
-from theseus.api.routes import assets, entities, health, shipwright
+from theseus.api.routes import assets, entities, health, maker, shipwright
 from theseus.database import Base, async_session_factory, engine
 import theseus.keel.assets.models  # noqa: F401
 import theseus.keel.event_store.models  # noqa: F401
@@ -69,6 +69,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(entities.router)
     app.include_router(assets.router)
+    app.include_router(maker.router)
     app.include_router(shipwright.router)
     return app
 
