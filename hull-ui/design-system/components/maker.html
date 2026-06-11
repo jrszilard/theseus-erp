@@ -1,0 +1,66 @@
+{% import 'primitives.html' as ui %}
+
+{% macro version_badge(number, status) -%}
+<span class="version-badge version-{{ status }}">v{{ number }}</span>
+{%- endmacro %}
+
+{% macro design_card(d) -%}
+<a class="design-card" href="/designs/{{ d.id }}">
+  <div class="design-card-title">{{ d.title }}</div>
+  <div class="design-card-formats">
+    {% for f in d.formats %}<span class="chip">{{ f }}</span>{% endfor %}
+  </div>
+  <div class="design-card-pulse">
+    {{ ui.badge(d.status, variant='default') }}
+    <span class="muted">{{ d.units_sold|int }} sold</span>
+  </div>
+</a>
+{%- endmacro %}
+
+{% macro variation_row(v) -%}
+<tr class="variation-row">
+  <td>{{ v.sku }}</td>
+  <td>${{ '%.2f'|format(v.price|float) }}</td>
+  <td>${{ '%.2f'|format(v.cost|float) }}</td>
+  <td class="pos">+${{ '%.2f'|format(v.profit|float) }} <span class="muted">({{ v.margin|int }}%)</span></td>
+  <td>{{ v.sold|int }} · {{ v.on_hand|int }}{% if (v.on_hand|float) <= 0 %} <span class="danger">✗</span>{% endif %}</td>
+  <td><a href="/bom/{{ v.id }}">→ BOM</a></td>
+</tr>
+{%- endmacro %}
+
+{% macro bom_table(lines, labor) -%}
+<table class="bom-table">
+  <thead><tr><td>material</td><td>per unit</td><td>in stock</td><td>wtd-avg cost</td><td>line $</td></tr></thead>
+  <tbody>
+    {% for l in lines %}
+    <tr>
+      <td>{{ l.material }}</td><td>{{ l.qty_per_unit }}</td>
+      <td>{{ l.in_stock }}{% if l.low %} {{ ui.badge('low', variant='warning') }}{% endif %}</td>
+      <td>${{ '%.2f'|format(l.wac|float) }}</td><td>${{ '%.2f'|format(l.line_cost|float) }}</td>
+    </tr>
+    {% endfor %}
+    {% if labor.minutes %}
+    <tr class="labor"><td>Labor</td><td>{{ labor.minutes }} min</td><td>—</td>
+        <td>${{ '%.2f'|format(labor.rate|float) }}/hr</td><td>${{ '%.2f'|format(labor.cost|float) }}</td></tr>
+    {% endif %}
+  </tbody>
+</table>
+{%- endmacro %}
+
+{% macro tally_tile(v) -%}
+<button class="tally-tile" data-variation="{{ v.id }}" data-price="{{ v.price }}">
+  <span class="tally-label">{{ v.label }}</span>
+  <span class="tally-price">${{ '%.2f'|format(v.price|float) }}</span>
+  <span class="tally-count" data-count="0">0</span>
+</button>
+{%- endmacro %}
+
+{% macro sales_bar(segments, total_label) -%}
+<div class="sales-bar" role="img" aria-label="{{ total_label }}">
+  {% for s in segments %}<span class="sales-seg" style="flex:{{ s.value|float }}" title="{{ s.label }}"></span>{% endfor %}
+</div>
+{%- endmacro %}
+
+{% macro shipwright_bubble(text, kind='info') -%}
+<div class="sw-bubble sw-{{ kind }}">{{ text }}</div>
+{%- endmacro %}
