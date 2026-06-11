@@ -1,0 +1,9 @@
+{% import 'maker.html' as mk %}
+<div id="bom-numbers">
+  <p class="buildable">buildable now: <strong>{{ bom.buildable }}</strong>
+     {% if bom.limiting_material %}<span class="muted">— limited by {{ bom.limiting_material }}</span>{% endif %}</p>
+  {{ mk.bom_table(bom.lines, bom.labor) }}
+  <p class="cogs">COGS per unit <strong>${{ '%.2f'|format(bom.cogs) }}</strong> ·
+     price ${{ '%.2f'|format(bom.price) }} → profit
+     <span class="pos">+${{ '%.2f'|format(bom.profit) }} ({{ bom.margin|int }}%)</span></p>
+</div>

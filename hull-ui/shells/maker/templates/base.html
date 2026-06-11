@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-density="cozy">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Maker Edition{% endblock %}</title>
+  <link rel="stylesheet" href="/static/hull/tokens/tokens.css">
+  <link rel="stylesheet" href="/static/hull/tokens/theme-dark.css">
+  <link rel="stylesheet" href="/static/hull/tokens/density.css">
+  <link rel="stylesheet" href="/static/hull/hull.css">
+  <link rel="stylesheet" href="/static/maker/maker.css">
+  <script src="/static/hull/vendor/htmx.min.js" defer></script>
+  <script src="/static/maker/maker.js" defer></script>
+</head>
+<body>
+  <header class="app-bar">
+    <span class="brand">🪶 Maker Edition</span>
+    <nav class="app-nav">
+      <a href="/">Ideas</a>
+      <a href="/markets">Markets</a>
+    </nav>
+    <span class="app-bar-spacer"></span>
+    <button class="btn" data-cmdk aria-label="Command palette">⌘K</button>
+  </header>
+  <div class="app-layout">
+    <main class="app-main">
+      {% block content %}{% endblock %}
+    </main>
+    <aside class="sw-sidebar" aria-label="Shipwright">
+      <div class="sw-header">🪶 Shipwright</div>
+      <div class="sw-messages">
+        {% block shipwright %}
+        <div class="sw-bubble sw-info">Shipwright insights arrive in a later update.</div>
+        {% endblock %}
+      </div>
+    </aside>
+  </div>
+  {% include 'partials/_command_palette.html' ignore missing %}
+</body>
+</html>

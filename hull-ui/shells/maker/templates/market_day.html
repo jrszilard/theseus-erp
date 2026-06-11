@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% import 'primitives.html' as ui %}
+{% import 'maker.html' as mk %}
+{% block title %}{{ market.name }} — Maker Edition{% endblock %}
+{% block content %}
+<nav class="crumbs"><a href="/markets">Markets</a> › <span>{{ market.name }}</span></nav>
+<h1>🎪 {{ market.name }}</h1>
+<p class="muted">{{ market.date }} · {{ market.location }} · booth ${{ '%.0f'|format(market.booth_fee) }}</p>
+
+{% include 'partials/_market_lines.html' %}
+
+{% call ui.card(title='Add a sale (manual)') %}
+  <form hx-post="/markets/{{ market.id }}/sale" hx-target="#market-lines" hx-swap="outerHTML" class="sale-form">
+    {{ ui.select(name='variation_id', options=variation_options) }}
+    {{ ui.input(name='channel_id', value=default_channel_id, type='hidden') }}
+    {{ ui.input(name='quantity', value='1', type='number') }}
+    {{ ui.input(name='unit_price', value='', type='number', placeholder='price') }}
+    {{ ui.button('Add line', variant='primary', type='submit') }}
+  </form>
+{% endcall %}
+
+{% call ui.card(title='Tap-to-tally') %}
+  <div class="tally-grid" data-market="{{ market.id }}" data-channel="{{ default_channel_id }}">
+    {% for v in market.variations %}{{ mk.tally_tile(v) }}{% endfor %}
+  </div>
+  {{ ui.button('Done — commit session', variant='primary',
+       attrs='data-tally-commit="/markets/' ~ market.id ~ '/tally" data-channel="' ~ default_channel_id ~ '"') }}
+  <p class="muted">Tap to tally during the market; "Done" commits the session in one POST.</p>
+{% endcall %}
+
+{% call ui.card(title='Tell the Shipwright') %}
+  {{ ui.textarea(name='natural', placeholder='e.g. sold 12 loon stickers and 3 magnets') }}
+  <p class="muted">Natural-language capture arrives with the Shipwright (Plan 4).</p>
+{% endcall %}
+{% endblock %}

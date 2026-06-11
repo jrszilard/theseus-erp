@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% import 'maker.html' as mk %}
+{% import 'primitives.html' as ui %}
+{% block title %}{{ design.title }} — Maker Edition{% endblock %}
+{% block content %}
+<nav class="crumbs"><a href="/">Ideas</a> › <span>{{ design.title }}</span></nav>
+<h1>{{ design.title }} {{ ui.badge(design.status) }}</h1>
+
+{% for product in design.products %}
+<details class="format-block" {% if design.products|length == 1 %}open{% endif %}>
+  <summary>{{ product.format }}</summary>
+  {% for version in product.versions %}
+  <div class="version-block">
+    {{ mk.version_badge(version.number, version.status) }}
+    <table class="var-table">
+      <thead><tr><td>variation</td><td>price</td><td>cost</td><td>profit (margin)</td><td>sold · on hand</td><td></td></tr></thead>
+      <tbody>
+        {% for v in version.variations %}{{ mk.variation_row(v) }}{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endfor %}
+</details>
+{% endfor %}
+
+{% call ui.card(title='Sales by channel') %}
+  {{ mk.sales_bar(design.channels, 'sales by channel') }}
+  <ul class="channel-list">
+    {% for c in design.channels %}<li>{{ c.label }} — {{ c.value|int }}</li>{% endfor %}
+  </ul>
+{% endcall %}
+{% endblock %}
