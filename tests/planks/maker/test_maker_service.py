@@ -413,3 +413,59 @@ async def test_set_reorder_point_rejects_negative(db_session) -> None:
     mat = await svc.create_material(sku="RP-NEG", name="Neg", unit="ml")
     with pytest.raises(ValueError, match="reorder_point"):
         await svc.set_reorder_point(_uuid.UUID(mat["id"]), -5)
+
+
+async def _product_with_two_versions(db_session):
+    import uuid as _uuid
+    pid, cur, draft, fmt = _uuid.uuid4(), _uuid.uuid4(), _uuid.uuid4(), _uuid.uuid4()
+    did = _uuid.uuid4()
+    await db_session.execute(
+        text("INSERT INTO maker_format (id,name,default_unit) VALUES (:i,'F','each')"),
+        {"i": fmt},
+    )
+    await db_session.execute(
+        text("INSERT INTO maker_design (id,title,slug,status) VALUES (:i,'D',:s,'released')"),
+        {"i": did, "s": f"pv{_uuid.uuid4().hex[:6]}"},
+    )
+    await db_session.execute(
+        text("INSERT INTO maker_product (id,name,design_id,format_id) VALUES (:i,'P',:d,:f)"),
+        {"i": pid, "d": did, "f": fmt},
+    )
+    await db_session.execute(
+        text("INSERT INTO maker_product_version (id,number,status,product_id)"
+             " VALUES (:i,1,'current',:p)"),
+        {"i": cur, "p": pid},
+    )
+    await db_session.execute(
+        text("INSERT INTO maker_product_version (id,number,status,product_id)"
+             " VALUES (:i,2,'draft',:p)"),
+        {"i": draft, "p": pid},
+    )
+    await db_session.flush()
+    return pid, cur, draft
+
+
+@pytest.mark.asyncio
+async def test_promote_version_flips_and_retires(db_session) -> None:
+    _, cur, draft = await _product_with_two_versions(db_session)
+    svc = MakerService(session=db_session)
+    await svc.promote_version(draft)
+    statuses = dict((str(r["id"]), r["status"]) for r in (await db_session.execute(text(
+        "SELECT id, status FROM maker_product_version WHERE id IN (:a, :b)"),
+        {"a": cur, "b": draft})).mappings().all())
+    assert statuses[str(draft)] == "current"
+    assert statuses[str(cur)] == "retired"
+
+
+@pytest.mark.asyncio
+async def test_promote_non_draft_raises(db_session) -> None:
+    _, cur, _ = await _product_with_two_versions(db_session)
+    svc = MakerService(session=db_session)
+    await svc.promote_version(cur)  # already current -> no-op, no raise
+    # a retired version cannot be promoted
+    await db_session.execute(
+        text("UPDATE maker_product_version SET status='retired' WHERE id=:i"), {"i": cur}
+    )
+    await db_session.flush()
+    with pytest.raises(ValueError, match="not a draft"):
+        await svc.promote_version(cur)

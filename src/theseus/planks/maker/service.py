@@ -323,6 +323,34 @@ class MakerService:
         await self._session.flush()
         return _row_to_dict(result.mappings().one())
 
+    async def promote_version(self, version_id: uuid.UUID) -> dict[str, Any]:
+        """Promote a draft version to current and retire the previously-current one, in one
+        transaction (keeps the 'exactly one current per product' invariant). No-op if already
+        current; raises if the target is retired."""
+        row = (await self._session.execute(text(
+            "SELECT id, product_id, status FROM maker_product_version WHERE id = :v"
+        ), {"v": version_id})).mappings().one_or_none()
+        if row is None:
+            msg = f"Version {version_id} not found"
+            raise ValueError(msg)
+        if row["status"] == "current":
+            return {"id": str(version_id), "status": "current"}
+        if row["status"] != "draft":
+            msg = f"Version {version_id} is {row['status']}, not a draft"
+            raise ValueError(msg)
+
+        await self._session.execute(text(
+            "UPDATE maker_product_version SET status = 'retired' "
+            "WHERE product_id = :p AND status = 'current'"), {"p": row["product_id"]})
+        await self._session.execute(text(
+            "UPDATE maker_product_version SET status = 'current' WHERE id = :v"), {"v": version_id})
+        await emit_entity_event(
+            store=self._store, action="promoted", plank="maker", entity="ProductVersion",
+            entity_id=version_id, data={"product_id": str(row["product_id"])},
+        )
+        await self._session.flush()
+        return {"id": str(version_id), "status": "current"}
+
     async def record_sale(
         self, *, variation_id: uuid.UUID, channel_id: uuid.UUID,
         quantity: float, unit_price: float, source: str,
