@@ -31,3 +31,16 @@ async def test_bom_404_for_unknown(client) -> None:
     import uuid
     resp = await client.get(f"/bom/{uuid.uuid4()}")
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_set_reorder_updates_low_flag(client, db_session, maker_seed) -> None:
+    from sqlalchemy import text
+    mat = maker_seed["material_id"]
+    vid = maker_seed["variation_id"]
+    resp = await client.post(f"/bom/{vid}/reorder",
+                             data={"stock_item_id": mat, "value": "9999"}, follow_redirects=True)
+    assert resp.status_code == 200
+    rp = (await db_session.execute(text(
+        "SELECT reorder_point FROM inventory_stock_item WHERE id = :i"), {"i": mat})).scalar()
+    assert float(rp) == 9999

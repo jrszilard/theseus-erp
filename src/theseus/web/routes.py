@@ -5,7 +5,7 @@ import uuid
 from typing import TYPE_CHECKING, NamedTuple
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import text
 
 from theseus.database import get_session
@@ -70,6 +70,19 @@ async def bom_run(request: Request, variation_id: uuid.UUID,
     await session.commit()
     view = await read_models.get_bom_view(session, variation_id)
     return templates.TemplateResponse(request, "partials/_bom_numbers.html", {"bom": view})
+
+
+@router.post("/bom/{variation_id}/reorder")
+async def bom_set_reorder(
+    variation_id: uuid.UUID,
+    stock_item_id: uuid.UUID = Form(...),  # noqa: B008
+    value: float = Form(...),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> RedirectResponse:
+    svc = MakerService(session=session)
+    await svc.set_reorder_point(stock_item_id, value)
+    await session.commit()
+    return RedirectResponse(f"/bom/{variation_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/markets", response_class=HTMLResponse)

@@ -30,19 +30,31 @@ class MakerService:
 
     # ---- entity create-helpers (FK-aware; the generic router cannot set FKs) ----
 
-    async def create_material(self, *, sku: str, name: str, unit: str = "each") -> dict[str, Any]:
+    async def create_material(self, *, sku: str, name: str, unit: str = "each",
+                              reorder_point: float = 0) -> dict[str, Any]:
         """A material is an inventory StockItem with category 'raw_material'."""
         return await self._inventory.create_stock_item(
-            sku=sku, name=name, category="raw_material", unit_of_measure=unit,
+            sku=sku, name=name, category="raw_material",
+            unit_of_measure=unit, reorder_point=reorder_point,
         )
 
     async def create_finished_good(
-        self, *, sku: str, name: str, unit: str = "each"
+        self, *, sku: str, name: str, unit: str = "each", reorder_point: float = 0
     ) -> dict[str, Any]:
         """A variation's sellable stock is an inventory StockItem with category 'finished_good'."""
         return await self._inventory.create_stock_item(
-            sku=sku, name=name, category="finished_good", unit_of_measure=unit,
+            sku=sku, name=name, category="finished_good",
+            unit_of_measure=unit, reorder_point=reorder_point,
         )
+
+    async def set_reorder_point(self, stock_item_id: uuid.UUID, value: float) -> dict[str, Any]:
+        """Update the reorder_point for a stock item (material or finished good)."""
+        await self._session.execute(
+            text("UPDATE inventory_stock_item SET reorder_point = :r WHERE id = :i"),
+            {"r": value, "i": stock_item_id},
+        )
+        await self._session.flush()
+        return {"id": str(stock_item_id), "reorder_point": value}
 
     async def create_recipe(
         self, *, labor_minutes: float = 0, labor_rate_per_hour: float = 0

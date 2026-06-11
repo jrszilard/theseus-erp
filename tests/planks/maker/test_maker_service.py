@@ -383,3 +383,24 @@ async def test_record_sale_stores_explicit_sale_date(db_session) -> None:
     )
     stored = row.scalar()
     assert stored.date() == explicit_date.date()
+
+
+@pytest.mark.asyncio
+async def test_create_material_sets_reorder_point(db_session) -> None:
+    svc = MakerService(session=db_session)
+    mat = await svc.create_material(sku="RP-CARD", name="Card", unit="sheet", reorder_point=15)
+    assert float(mat["reorder_point"]) == 15
+
+
+@pytest.mark.asyncio
+async def test_set_reorder_point_updates_item(db_session) -> None:
+    import uuid as _uuid
+
+    from sqlalchemy import text
+    svc = MakerService(session=db_session)
+    mat = await svc.create_material(sku="RP-INK", name="Ink", unit="ml")
+    await svc.set_reorder_point(_uuid.UUID(mat["id"]), 20)
+    rp = (await db_session.execute(
+        text("SELECT reorder_point FROM inventory_stock_item WHERE id = :i"),
+        {"i": _uuid.UUID(mat["id"])})).scalar()
+    assert float(rp) == 20
