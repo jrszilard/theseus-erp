@@ -72,6 +72,15 @@ async def bom_run(request: Request, variation_id: uuid.UUID,
     return templates.TemplateResponse(request, "partials/_bom_numbers.html", {"bom": view})
 
 
+@router.post("/designs/{design_id}/versions/{version_id}/promote")
+async def promote_version_route(design_id: uuid.UUID, version_id: uuid.UUID,
+                                session: AsyncSession = Depends(get_session)) -> RedirectResponse:  # noqa: B008
+    svc = MakerService(session=session)
+    await svc.promote_version(version_id)
+    await session.commit()
+    return RedirectResponse(f"/designs/{design_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
 @router.post("/bom/{variation_id}/reorder")
 async def bom_set_reorder(
     variation_id: uuid.UUID,

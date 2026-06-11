@@ -29,6 +29,16 @@
     {% for c in design.channels %}<li>{{ c.label }} — {{ c.value|int }}</li>{% endfor %}
   </ul>
 {% endcall %}
+{% call ui.card(title='Sales by version') %}
+  {% for pv in design.version_compare %}
+  <p class="muted">{{ pv.product }}</p>
+  <ul class="version-list">
+    {% for v in pv.versions %}
+    <li>v{{ v.number }} ({{ v.status }}) — {{ v.units|int }} sold · ${{ '%.0f'|format(v.revenue) }}</li>
+    {% endfor %}
+  </ul>
+  {% endfor %}
+{% endcall %}
 {% endblock %}
 {% block shipwright %}
   {% include 'partials/_insights.html' %}
