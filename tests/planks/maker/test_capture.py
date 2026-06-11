@@ -47,3 +47,19 @@ async def test_parse_unparseable_returns_empty() -> None:
 async def test_parse_drops_unknown_skus() -> None:
     gw = _StubGateway('[{"sku": "nope", "quantity": 5}]')
     assert await parse_sale_text("5 of nothing", VARIATIONS, gw) == []
+
+
+@pytest.mark.asyncio
+async def test_parse_empty_content_returns_empty() -> None:
+    class _Empty:
+        def is_configured(self): return False
+        async def complete(self, *, messages, tools=None, temperature=0.7):
+            return {"content": "", "tool_calls": [], "configured": False, "error": None}
+    assert await parse_sale_text("anything", VARIATIONS, _Empty()) == []
+
+
+@pytest.mark.asyncio
+async def test_parse_string_unit_price() -> None:
+    gw = _StubGateway('[{"sku":"loon-magnet","quantity":1,"unit_price":"6.50"}]')
+    lines = await parse_sale_text("a magnet for 6.50", VARIATIONS, gw)
+    assert len(lines) == 1 and lines[0].unit_price == 6.5

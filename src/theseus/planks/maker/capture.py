@@ -12,7 +12,7 @@ _SYSTEM_PROMPT = (
     "each element is {\"sku\": <one of the listed skus>, \"quantity\": <number>, "
     "\"unit_price\": <number, optional>}. No prose, no markdown."
 )
-_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
+_FENCE = re.compile(r"^\s*```(?:json)?\s*$", re.MULTILINE)
 
 
 @dataclass
@@ -68,8 +68,21 @@ async def parse_sale_text(
             qty = float(it["quantity"])
         except (KeyError, ValueError, TypeError):
             continue
+        if qty <= 0:
+            continue
         up = it.get("unit_price")
-        unit_price: float | None = float(up) if isinstance(up, (int, float)) else None
+        unit_price: float | None
+        if isinstance(up, bool):
+            unit_price = None
+        elif isinstance(up, (int, float)):
+            unit_price = float(up)
+        elif isinstance(up, str):
+            try:
+                unit_price = float(up)
+            except ValueError:
+                unit_price = None
+        else:
+            unit_price = None
         lines.append(ParsedSaleLine(
             variation_id=str(v["id"]), label=str(v["label"]), quantity=qty,
             unit_price=unit_price,
