@@ -52,3 +52,49 @@ async def test_create_recipe_emits_event_with_id(db_session) -> None:
     store = PostgresEventStore(session=db_session)
     events = await store.get_events_by_type("maker.Recipe.created")
     assert any(e.data.get("id") == recipe["id"] for e in events)
+
+
+@pytest.mark.asyncio
+async def test_record_material_purchase_emits_event_and_bumps_stock(db_session) -> None:
+    svc = MakerService(session=db_session)
+    wh = await svc._inventory.create_warehouse(name="Studio", code="STUDIO")
+    material = await svc.create_material(sku="MAT-CARD-2", name="Cardstock", unit="sheet")
+    mid = uuid.UUID(material["id"])
+
+    await svc.record_material_purchase(
+        material_id=mid, quantity=100, unit_cost=0.20, warehouse_id=uuid.UUID(wh["id"]),
+    )
+    level = await svc._inventory.get_stock_level(mid)
+    assert level == 100.0
+    from theseus.keel.event_store.store import PostgresEventStore
+    store = PostgresEventStore(session=db_session)
+    events = await store.get_events_by_type("maker.MaterialPurchase.recorded")
+    assert any(e.data.get("material_id") == str(mid) for e in events)
+
+
+@pytest.mark.asyncio
+async def test_weighted_average_cost_folds_purchase_lots(db_session) -> None:
+    svc = MakerService(session=db_session)
+    wh = await svc._inventory.create_warehouse(name="Studio2", code="STUDIO2")
+    material = await svc.create_material(sku="MAT-CARD-3", name="Cardstock", unit="sheet")
+    mid = uuid.UUID(material["id"])
+    wid = uuid.UUID(wh["id"])
+
+    # 100 @ 0.20 then 100 @ 0.30 -> wac = (20 + 30) / 200 = 0.25
+    await svc.record_material_purchase(
+        material_id=mid, quantity=100, unit_cost=0.20, warehouse_id=wid
+    )
+    await svc.record_material_purchase(
+        material_id=mid, quantity=100, unit_cost=0.30, warehouse_id=wid
+    )
+
+    wac = await svc.weighted_average_cost(mid)
+    assert wac == pytest.approx(0.25)
+
+
+@pytest.mark.asyncio
+async def test_weighted_average_cost_is_zero_with_no_purchases(db_session) -> None:
+    svc = MakerService(session=db_session)
+    material = await svc.create_material(sku="MAT-CARD-4", name="Cardstock", unit="sheet")
+    wac = await svc.weighted_average_cost(uuid.UUID(material["id"]))
+    assert wac == 0.0

@@ -121,6 +121,51 @@ class MakerService:
         await self._session.flush()
         return _row_to_dict(result.mappings().one())
 
+    # ---- material purchases + weighted-average cost (event-sourced) ----
+
+    async def record_material_purchase(
+        self, *, material_id: uuid.UUID, quantity: float, unit_cost: float, warehouse_id: uuid.UUID
+    ) -> dict[str, Any]:
+        """Record buying a lot of a material: emit a purchase event (cost basis) and
+        a 'received' inventory movement (on-hand bump)."""
+        # entity_id is the material (an event stream per material), not a per-lot id — this is
+        # what weighted_average_cost folds over. Do not change to a per-purchase uuid.
+        await emit_entity_event(
+            store=self._store, action="recorded", plank="maker", entity="MaterialPurchase",
+            entity_id=material_id,
+            data={"material_id": str(material_id), "quantity": quantity, "unit_cost": unit_cost},
+        )
+        await self._inventory.record_movement(
+            stock_item_id=material_id, warehouse_id=warehouse_id,
+            movement_type="received", quantity=quantity, reference="material-purchase",
+        )
+        await self._session.flush()
+        return {"material_id": str(material_id), "quantity": quantity, "unit_cost": unit_cost}
+
+    async def weighted_average_cost(self, material_id: uuid.UUID) -> float:
+        """Weighted-average unit cost = sum(qty x unit_cost) / sum(qty) over all purchase lots.
+
+        v1 definition: averages ALL historical purchase lots and does not decay or reset as
+        stock is consumed by production. Returns 0.0 when the material has no recorded purchases.
+        """
+        # Direct query: PostgresEventStore can't filter by event_type AND entity_id in one call.
+        query = text(
+            "SELECT data FROM events "
+            "WHERE event_type = 'maker.MaterialPurchase.recorded' AND entity_id = :mid"
+        )
+        result = await self._session.execute(query, {"mid": material_id})
+        total_qty = Decimal("0")
+        total_cost = Decimal("0")
+        for row in result.mappings().all():
+            data = row["data"]
+            qty = Decimal(str(data["quantity"]))
+            cost = Decimal(str(data["unit_cost"]))
+            total_qty += qty
+            total_cost += qty * cost
+        if total_qty == 0:
+            return 0.0
+        return float(total_cost / total_qty)
+
 
 def _row_to_dict(row: Any) -> dict[str, Any]:
     result: dict[str, Any] = {}
