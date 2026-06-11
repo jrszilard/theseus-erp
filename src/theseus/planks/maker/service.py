@@ -231,6 +231,81 @@ class MakerService:
             buildable = possible if buildable is None else min(buildable, possible)
         return buildable if buildable is not None else 0
 
+    # ---- production ----
+
+    async def variation_on_hand(self, variation_id: uuid.UUID) -> float:
+        """Finished-good stock for a variation = stock level of its finished_stock item."""
+        var = await self._session.execute(
+            text("SELECT finished_stock_id FROM maker_variation WHERE id = :id"),
+            {"id": variation_id},
+        )
+        row = var.mappings().one_or_none()
+        if row is None or row["finished_stock_id"] is None:
+            return 0.0
+        return await self._inventory.get_stock_level(row["finished_stock_id"])
+
+    async def run_production(
+        self, *, variation_id: uuid.UUID, quantity: float, warehouse_id: uuid.UUID
+    ) -> dict[str, Any]:
+        """Make `quantity` units: snapshot unit COGS, consume each material, add finished
+        stock, and write an immutable production-run record. Does not block on shortage —
+        callers use buildable_now() as the advisory guard."""
+        var = await self._session.execute(
+            text("SELECT recipe_id, finished_stock_id FROM maker_variation WHERE id = :id"),
+            {"id": variation_id},
+        )
+        var_row = var.mappings().one_or_none()
+        if var_row is None:
+            msg = f"Variation {variation_id} not found"
+            raise ValueError(msg)
+
+        unit_cogs = await self.unit_cogs(variation_id)
+        total_cogs = unit_cogs * quantity
+
+        # Consume materials (negative 'adjusted' movements).
+        if var_row["recipe_id"] is not None:
+            lines = await self._session.execute(
+                text(
+                    "SELECT material_id, qty_per_unit FROM maker_recipe_line"
+                    " WHERE recipe_id = :rid"
+                ),
+                {"rid": var_row["recipe_id"]},
+            )
+            for line in lines.mappings().all():
+                consumed = float(line["qty_per_unit"]) * quantity
+                await self._inventory.record_movement(
+                    stock_item_id=line["material_id"], warehouse_id=warehouse_id,
+                    movement_type="adjusted", quantity=-consumed, reference="production-run",
+                )
+
+        # Add finished stock (positive 'received' movement).
+        if var_row["finished_stock_id"] is not None:
+            await self._inventory.record_movement(
+                stock_item_id=var_row["finished_stock_id"], warehouse_id=warehouse_id,
+                movement_type="received", quantity=quantity, reference="production-run",
+            )
+
+        run_id = uuid.uuid4()
+        params = {
+            "id": run_id, "variation_id": variation_id, "quantity": quantity,
+            "unit_cogs_snapshot": unit_cogs, "total_cogs": total_cogs,
+        }
+        query = text(
+            "INSERT INTO maker_production_run "
+            "(id, variation_id, quantity, unit_cogs_snapshot, total_cogs, run_date) "
+            "VALUES (:id, :variation_id, :quantity, :unit_cogs_snapshot, :total_cogs, now()) "
+            "RETURNING *"
+        )
+        result = await self._session.execute(query, params)
+        await emit_entity_event(
+            store=self._store, action="recorded", plank="maker", entity="ProductionRun",
+            entity_id=run_id,
+            data={"variation_id": str(variation_id), "quantity": quantity,
+                  "unit_cogs_snapshot": unit_cogs, "total_cogs": total_cogs},
+        )
+        await self._session.flush()
+        return _row_to_dict(result.mappings().one())
+
 
 def _row_to_dict(row: Any) -> dict[str, Any]:
     result: dict[str, Any] = {}

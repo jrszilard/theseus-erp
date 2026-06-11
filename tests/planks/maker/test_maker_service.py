@@ -1,6 +1,7 @@
 import uuid
 
 import pytest
+from sqlalchemy import text
 
 from theseus.planks.maker.service import MakerService
 
@@ -206,3 +207,70 @@ async def test_buildable_now_handles_sub_unit_quantities(db_session) -> None:
         sku="VAR-SUB", base_price=2.0, recipe_id=uuid.UUID(recipe["id"])
     )
     assert await svc.buildable_now(uuid.UUID(variation["id"])) == 10
+
+
+@pytest.mark.asyncio
+async def test_run_production_consumes_materials_and_adds_finished_stock(db_session) -> None:
+    svc = MakerService(session=db_session)
+    wh = await svc._inventory.create_warehouse(name="StudioP", code="STUDIOP")
+    wid = uuid.UUID(wh["id"])
+
+    card = await svc.create_material(sku="MAT-CARD-P", name="Cardstock", unit="sheet")
+    cid = uuid.UUID(card["id"])
+    await svc.record_material_purchase(
+        material_id=cid, quantity=100, unit_cost=0.20, warehouse_id=wid,
+    )
+
+    finished = await svc.create_finished_good(sku="FG-P", name="Loon Print")
+    fid = uuid.UUID(finished["id"])
+    recipe = await svc.create_recipe(labor_minutes=0, labor_rate_per_hour=0)
+    await svc.add_recipe_line(  # 2 sheets/unit
+        recipe_id=uuid.UUID(recipe["id"]), material_id=cid, qty_per_unit=2,
+    )
+    variation = await svc.create_variation(
+        sku="VAR-P", base_price=10.0, recipe_id=uuid.UUID(recipe["id"]), finished_stock_id=fid,
+    )
+    vid = uuid.UUID(variation["id"])
+
+    run = await svc.run_production(variation_id=vid, quantity=10, warehouse_id=wid)
+
+    # 10 units * 2 sheets = 20 consumed -> 100 - 20 = 80 left
+    assert await svc._inventory.get_stock_level(cid) == 80.0
+    # 10 finished goods added
+    assert await svc.variation_on_hand(vid) == 10.0
+    # COGS snapshot: 2 sheets * 0.20 = 0.40/unit, total 4.00
+    assert run["unit_cogs_snapshot"] == pytest.approx(0.40)
+    assert run["total_cogs"] == pytest.approx(4.00)
+
+
+@pytest.mark.asyncio
+async def test_run_production_snapshot_is_immune_to_later_price_changes(db_session) -> None:
+    svc = MakerService(session=db_session)
+    wh = await svc._inventory.create_warehouse(name="StudioS", code="STUDIOS")
+    wid = uuid.UUID(wh["id"])
+    card = await svc.create_material(sku="MAT-CARD-S", name="Cardstock", unit="sheet")
+    cid = uuid.UUID(card["id"])
+    await svc.record_material_purchase(
+        material_id=cid, quantity=100, unit_cost=0.20, warehouse_id=wid,
+    )
+    finished = await svc.create_finished_good(sku="FG-S", name="Print S")
+    recipe = await svc.create_recipe()
+    await svc.add_recipe_line(recipe_id=uuid.UUID(recipe["id"]), material_id=cid, qty_per_unit=1)
+    variation = await svc.create_variation(
+        sku="VAR-S", base_price=10.0, recipe_id=uuid.UUID(recipe["id"]),
+        finished_stock_id=uuid.UUID(finished["id"]),
+    )
+    run = await svc.run_production(
+        variation_id=uuid.UUID(variation["id"]), quantity=5, warehouse_id=wid,
+    )
+    assert run["unit_cogs_snapshot"] == pytest.approx(0.20)
+
+    # Buy a pricier lot AFTER the run; the run's snapshot must not change.
+    await svc.record_material_purchase(
+        material_id=cid, quantity=100, unit_cost=0.40, warehouse_id=wid,
+    )
+    row = await db_session.execute(
+        text("SELECT unit_cogs_snapshot FROM maker_production_run WHERE id = :id"),
+        {"id": uuid.UUID(run["id"])},
+    )
+    assert float(row.scalar()) == pytest.approx(0.20)
