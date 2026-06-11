@@ -115,15 +115,27 @@ async def search(request: Request, q: str = "",
 async def market_tally(request: Request, market_event_id: uuid.UUID,
                        session_data: str = Form(..., alias="session"),
                        session: AsyncSession = Depends(get_session)) -> HTMLResponse:  # noqa: B008
-    lines = json.loads(session_data)
-    for ln in lines:
+    try:
+        lines = json.loads(session_data)
+        params = [
+            {"i": uuid.uuid4(), "q": float(ln["quantity"]), "p": float(ln["unit_price"]),
+             "v": uuid.UUID(ln["variation_id"]), "c": uuid.UUID(ln["channel_id"]),
+             "m": market_event_id}
+            for ln in lines
+        ]
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError) as exc:
+        # Validate the whole payload before any write, so a bad line is a clean
+        # client error (422) rather than a 500 — and never a partial commit.
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="invalid tally payload",
+        ) from exc
+    for p in params:
         await session.execute(text(
             "INSERT INTO maker_sale (id, quantity, unit_price, fees, sale_date, source, "
             "variation_id, channel_id, market_event_id) "
             "VALUES (:i, :q, :p, 0, now(), 'tally', :v, :c, :m)"
-        ), {"i": uuid.uuid4(), "q": float(ln["quantity"]), "p": float(ln["unit_price"]),
-            "v": uuid.UUID(ln["variation_id"]), "c": uuid.UUID(ln["channel_id"]),
-            "m": market_event_id})
+        ), p)
     await session.commit()
     view = await read_models.get_market_day(session, market_event_id)
     return templates.TemplateResponse(request, "partials/_market_lines.html", {"market": view})

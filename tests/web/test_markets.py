@@ -39,3 +39,23 @@ async def test_manual_sale_appends_line(client, db_session, maker_seed) -> None:
     )
     assert resp.status_code == 200
     assert "2" in resp.text  # the new line's qty appears in the re-rendered lines partial
+
+
+@pytest.mark.asyncio
+async def test_tally_malformed_json_returns_422(client) -> None:
+    """A malformed tally payload is client error, not a server crash (no partial write)."""
+    resp = await client.post(
+        f"/markets/{uuid.uuid4()}/tally",
+        data={"session": "not-json{{{"},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_tally_well_formed_json_wrong_shape_returns_422(client) -> None:
+    """Valid JSON but the wrong shape (bad uuid / missing keys) is also a 422."""
+    resp = await client.post(
+        f"/markets/{uuid.uuid4()}/tally",
+        data={"session": '[{"variation_id": "not-a-uuid", "quantity": "1"}]'},
+    )
+    assert resp.status_code == 422
