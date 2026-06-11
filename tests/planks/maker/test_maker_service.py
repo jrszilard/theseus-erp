@@ -459,13 +459,17 @@ async def test_promote_version_flips_and_retires(db_session) -> None:
 
 @pytest.mark.asyncio
 async def test_promote_non_draft_raises(db_session) -> None:
-    _, cur, _ = await _product_with_two_versions(db_session)
+    _, cur, draft = await _product_with_two_versions(db_session)
     svc = MakerService(session=db_session)
-    await svc.promote_version(cur)  # already current -> no-op, no raise
-    # a retired version cannot be promoted
-    await db_session.execute(
-        text("UPDATE maker_product_version SET status='retired' WHERE id=:i"), {"i": cur}
-    )
-    await db_session.flush()
+    await svc.promote_version(cur)      # already current -> no-op, no raise
+    await svc.promote_version(draft)    # promotes draft; retires `cur` via the service
     with pytest.raises(ValueError, match="not a draft"):
-        await svc.promote_version(cur)
+        await svc.promote_version(cur)  # cur is now retired-by-promotion
+
+
+@pytest.mark.asyncio
+async def test_promote_version_not_found_raises(db_session) -> None:
+    import uuid as _uuid
+    svc = MakerService(session=db_session)
+    with pytest.raises(ValueError, match="not found"):
+        await svc.promote_version(_uuid.uuid4())
