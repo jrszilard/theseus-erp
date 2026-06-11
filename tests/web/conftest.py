@@ -8,25 +8,62 @@ from theseus.planks.maker.service import MakerService
 
 @pytest_asyncio.fixture(loop_scope="session")
 async def maker_seed(db_session):
-    """A small but complete maker graph: one design -> product (Print) -> version v1
-    -> a variation with a recipe + materials + purchases + sales, plus a warehouse,
-    a channel, and a market event with sales. Returns the key ids."""
+    """A small but complete maker graph (idempotent: a prior test's committed route
+    may have persisted it on the shared session, so reuse it if present)."""
+    async def _scalar(sql: str, **params):
+        return (await db_session.execute(text(sql), params)).scalar()
+
+    existing = await _scalar("SELECT id FROM maker_design WHERE slug = 'loon'")
+    if existing is not None:
+        version_id = await _scalar(
+            "SELECT pv.id FROM maker_product_version pv "
+            "JOIN maker_product p ON p.id = pv.product_id "
+            "WHERE p.design_id = :d",
+            d=existing,
+        )
+        return {
+            "design_id": str(existing),
+            "product_id": str(
+                await _scalar("SELECT id FROM maker_product WHERE design_id = :d", d=existing)
+            ),
+            "version_id": str(version_id),
+            "variation_id": str(
+                await _scalar("SELECT id FROM maker_variation WHERE sku = '8x10'")
+            ),
+            "material_id": str(
+                await _scalar("SELECT id FROM inventory_stock_item WHERE sku = 'SEED-CARD'")
+            ),
+            "channel_id": str(
+                await _scalar("SELECT id FROM maker_channel WHERE name = 'Etsy'")
+            ),
+            "market_event_id": str(
+                await _scalar(
+                    "SELECT id FROM maker_market_event WHERE name = 'May Lakeside Fair'"
+                )
+            ),
+            "warehouse_id": str(
+                await _scalar("SELECT id FROM inventory_warehouse WHERE code = 'SEED-STUDIO'")
+            ),
+        }
+
+    # --- fresh insert path ---
     svc = MakerService(session=db_session)
+
     wh = await svc._inventory.create_warehouse(name="Studio", code="SEED-STUDIO")
     wid = uuid.UUID(wh["id"])
 
-    # materials + purchases (sets weighted-average cost)
     card = await svc.create_material(sku="SEED-CARD", name="Cardstock 8x10", unit="sheet")
+    card_id = uuid.UUID(card["id"])
     await svc.record_material_purchase(
-        material_id=uuid.UUID(card["id"]), quantity=100, unit_cost=0.42, warehouse_id=wid
+        material_id=card_id, quantity=100, unit_cost=0.42, warehouse_id=wid
     )
 
-    # lookup rows (format, channel) via direct insert
     fmt_id = uuid.uuid4()
     await db_session.execute(
         text("INSERT INTO maker_format (id, name, default_unit) VALUES (:i,:n,'each')"),
         {"i": fmt_id, "n": "Print"},
     )
+
     ch_id = uuid.uuid4()
     await db_session.execute(
         text(
@@ -36,7 +73,6 @@ async def maker_seed(db_session):
         {"i": ch_id},
     )
 
-    # design -> product -> version
     design_id = uuid.uuid4()
     await db_session.execute(
         text(
@@ -62,10 +98,9 @@ async def maker_seed(db_session):
         {"i": version_id, "p": product_id},
     )
 
-    # a variation with a recipe
     recipe = await svc.create_recipe(labor_minutes=15, labor_rate_per_hour=15.44)
     await svc.add_recipe_line(
-        recipe_id=uuid.UUID(recipe["id"]), material_id=uuid.UUID(card["id"]), qty_per_unit=1
+        recipe_id=uuid.UUID(recipe["id"]), material_id=card_id, qty_per_unit=1
     )
     finished = await svc.create_finished_good(sku="SEED-FG-8x10", name="Loon Print 8x10")
     var = await svc.create_variation(
@@ -76,7 +111,6 @@ async def maker_seed(db_session):
         product_version_id=version_id,
     )
     var_id = uuid.UUID(var["id"])
-    # produce stock then a couple of sales
     await svc.run_production(variation_id=var_id, quantity=20, warehouse_id=wid)
     await db_session.execute(
         text(
@@ -85,7 +119,6 @@ async def maker_seed(db_session):
         ),
         {"i": uuid.uuid4(), "v": var_id, "c": ch_id},
     )
-    # market event with a sale
     me_id = uuid.uuid4()
     await db_session.execute(
         text(
@@ -102,14 +135,15 @@ async def maker_seed(db_session):
         ),
         {"i": uuid.uuid4(), "v": var_id, "c": ch_id, "m": me_id},
     )
+
     await db_session.flush()
     return {
         "design_id": str(design_id),
         "product_id": str(product_id),
         "version_id": str(version_id),
         "variation_id": str(var_id),
-        "material_id": card["id"],
+        "material_id": str(card_id),
         "channel_id": str(ch_id),
         "market_event_id": str(me_id),
-        "warehouse_id": wh["id"],
+        "warehouse_id": str(wid),
     }

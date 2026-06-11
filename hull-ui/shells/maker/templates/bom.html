@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% import 'primitives.html' as ui %}
+{% block title %}BOM {{ bom.sku }} — Maker Edition{% endblock %}
+{% block content %}
+<nav class="crumbs"><a href="/">Ideas</a> › <span>{{ bom.sku }}</span> › BOM</nav>
+<h1>BOM — {{ bom.sku }}</h1>
+
+{% include 'partials/_bom_numbers.html' %}
+
+{% call ui.card(title='Make a production run') %}
+  <form hx-post="/bom/{{ bom.variation_id }}/run" hx-target="#bom-numbers" hx-swap="outerHTML">
+    {{ ui.input(name='quantity', value='8', type='number') }}
+    {{ ui.input(name='warehouse_id', value=warehouse_id, type='hidden') }}
+    {{ ui.button('Make Run', variant='primary', type='submit') }}
+  </form>
+  <p class="muted">Decrements materials, adds finished stock, and snapshots today's COGS as an event.</p>
+{% endcall %}
+<p><a href="#">↗ Open full Materials catalog</a> <span class="muted">(coming later)</span></p>
+{% endblock %}
