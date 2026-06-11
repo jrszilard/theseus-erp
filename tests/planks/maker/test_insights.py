@@ -77,3 +77,25 @@ async def test_make_more_skips_healthy_unsold(db_session) -> None:
     design_id, vid = await _design_with_variation(db_session, on_hand=50, reorder=0, sold=0)
     rows = await MakerInsights(session=db_session).make_more(design_id)
     assert all(r["variation_id"] != str(vid) for r in rows)
+
+
+@pytest.mark.asyncio
+async def test_restock_flags_material_at_or_below_reorder(db_session) -> None:
+    svc = MakerService(session=db_session)
+    wh = await svc._inventory.create_warehouse(name="W", code=f"RS-{uuid.uuid4().hex[:6]}")
+    mat = await svc.create_material(sku=f"RS-{uuid.uuid4().hex[:6]}", name="Card", reorder_point=10)
+    await svc.record_material_purchase(material_id=uuid.UUID(mat["id"]), quantity=8,
+                                       unit_cost=1.0, warehouse_id=uuid.UUID(wh["id"]))
+    rows = await MakerInsights(session=db_session).restock()
+    assert any(r["material_id"] == mat["id"] and r["on_hand"] == 8 for r in rows)
+
+
+@pytest.mark.asyncio
+async def test_version_compare_sums_units_and_revenue(db_session) -> None:
+    design_id, _vid = await _design_with_variation(db_session, on_hand=10, reorder=0, sold=3)
+    product_id = (await db_session.execute(text(
+        "SELECT p.id FROM maker_product p JOIN maker_design d ON d.id = p.design_id WHERE d.id = :d"
+    ), {"d": design_id})).scalar()
+    rows = await MakerInsights(session=db_session).version_compare(product_id)
+    assert rows[0]["units"] == 3.0
+    assert rows[0]["revenue"] == 75.0  # 3 x 25

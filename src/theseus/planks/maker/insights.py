@@ -59,3 +59,32 @@ class MakerInsights:
             })
         out.sort(key=lambda x: (not x["running_low"], -x["sold_60d"]))
         return out
+
+    async def restock(self, warehouse_id: uuid.UUID | None = None) -> list[dict[str, Any]]:
+        rows = (await self._session.execute(text(
+            "SELECT id, name, reorder_point FROM inventory_stock_item "
+            "WHERE category = 'raw_material' AND is_active = true ORDER BY name"
+        ))).mappings().all()
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            on_hand = await self._svc._inventory.get_stock_level(r["id"])
+            reorder = float(r["reorder_point"] or 0)
+            if on_hand > reorder:
+                continue
+            out.append({"material_id": str(r["id"]), "name": r["name"], "on_hand": on_hand,
+                        "reorder_point": reorder,
+                        "nudge": f"{r['name']}: {on_hand:g} on hand (reorder at {reorder:g})"})
+        return out
+
+    async def version_compare(self, product_id: uuid.UUID) -> list[dict[str, Any]]:
+        rows = (await self._session.execute(text(
+            "SELECT pv.id, pv.number, pv.status, "
+            "COALESCE(SUM(s.quantity),0) AS units, "
+            "COALESCE(SUM(s.quantity * s.unit_price),0) AS revenue "
+            "FROM maker_product_version pv "
+            "LEFT JOIN maker_variation v ON v.product_version_id = pv.id "
+            "LEFT JOIN maker_sale s ON s.variation_id = v.id "
+            "WHERE pv.product_id = :p GROUP BY pv.id, pv.number, pv.status ORDER BY pv.number"
+        ), {"p": product_id})).mappings().all()
+        return [{"version_id": str(r["id"]), "number": r["number"], "status": r["status"],
+                 "units": float(r["units"]), "revenue": float(r["revenue"])} for r in rows]
