@@ -12,6 +12,7 @@ from theseus.api.routes import assets, entities, health, shipwright
 from theseus.database import Base, async_session_factory, engine
 import theseus.keel.assets.models  # noqa: F401
 import theseus.keel.event_store.models  # noqa: F401
+from theseus.keel.blueprint_engine.discovery import discover_blueprint_files
 from theseus.keel.blueprint_engine.parser import BlueprintFileParser
 from theseus.keel.blueprint_engine.registry import BlueprintRegistry
 from theseus.keel.knowledge_graph.graph import PostgresKnowledgeGraph
@@ -21,6 +22,7 @@ from theseus.keel.schema_engine.generator import SchemaGenerator
 logger = logging.getLogger("theseus")
 
 BLUEPRINTS_DIR = Path("blueprints")
+PLANKS_DIR = Path("planks")
 
 
 @asynccontextmanager
@@ -30,10 +32,10 @@ async def lifespan(app: FastAPI):
     parser = BlueprintFileParser()
     registry = BlueprintRegistry()
 
-    if BLUEPRINTS_DIR.exists():
-        for bp in parser.parse_directory(BLUEPRINTS_DIR):
-            registry.register(bp)
-            logger.info("Registered Blueprint: %s", bp.full_name)
+    for bp_file in discover_blueprint_files(BLUEPRINTS_DIR, PLANKS_DIR):
+        bp = parser.parse_file(bp_file)
+        registry.register(bp)
+        logger.info("Registered Blueprint: %s", bp.full_name)
 
     set_registry(registry)
 
