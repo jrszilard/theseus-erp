@@ -166,6 +166,43 @@ class MakerService:
             return 0.0
         return float(total_cost / total_qty)
 
+    # ---- costing ----
+
+    async def unit_cogs(self, variation_id: uuid.UUID) -> float:
+        """COGS for one unit = sum(line.qty_per_unit x wac(material)) + labor cost.
+
+        Labor cost = (labor_minutes / 60) x labor_rate_per_hour. Returns 0.0 when the
+        variation has no recipe attached.
+        """
+        var = await self._session.execute(
+            text("SELECT recipe_id FROM maker_variation WHERE id = :id"), {"id": variation_id}
+        )
+        var_row = var.mappings().one_or_none()
+        if var_row is None or var_row["recipe_id"] is None:
+            return 0.0
+        recipe_id = var_row["recipe_id"]
+
+        recipe = await self._session.execute(
+            text("SELECT labor_minutes, labor_rate_per_hour FROM maker_recipe WHERE id = :id"),
+            {"id": recipe_id},
+        )
+        recipe_row = recipe.mappings().one()
+        labor_minutes = Decimal(str(recipe_row["labor_minutes"] or 0))
+        labor_rate = Decimal(str(recipe_row["labor_rate_per_hour"] or 0))
+        labor_cost = (labor_minutes / Decimal("60")) * labor_rate
+
+        lines = await self._session.execute(
+            text("SELECT material_id, qty_per_unit FROM maker_recipe_line WHERE recipe_id = :rid"),
+            {"rid": recipe_id},
+        )
+        material_cost = Decimal("0")
+        # One WAC query per line. Fine at maker scale (few lines); batch if recipes grow large.
+        for line in lines.mappings().all():
+            wac = Decimal(str(await self.weighted_average_cost(line["material_id"])))
+            material_cost += Decimal(str(line["qty_per_unit"])) * wac
+
+        return float(material_cost + labor_cost)
+
 
 def _row_to_dict(row: Any) -> dict[str, Any]:
     result: dict[str, Any] = {}

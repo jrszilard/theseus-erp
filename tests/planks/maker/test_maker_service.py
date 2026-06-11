@@ -98,3 +98,54 @@ async def test_weighted_average_cost_is_zero_with_no_purchases(db_session) -> No
     material = await svc.create_material(sku="MAT-CARD-4", name="Cardstock", unit="sheet")
     wac = await svc.weighted_average_cost(uuid.UUID(material["id"]))
     assert wac == 0.0
+
+
+@pytest.mark.asyncio
+async def test_unit_cogs_sums_materials_plus_labor(db_session) -> None:
+    svc = MakerService(session=db_session)
+    wh = await svc._inventory.create_warehouse(name="StudioC", code="STUDIOC")
+    wid = uuid.UUID(wh["id"])
+
+    card = await svc.create_material(sku="MAT-CARD-C", name="Cardstock", unit="sheet")
+    ink = await svc.create_material(sku="MAT-INK-C", name="Ink", unit="ml")
+    await svc.record_material_purchase(
+        material_id=uuid.UUID(card["id"]), quantity=100, unit_cost=0.20, warehouse_id=wid
+    )
+    await svc.record_material_purchase(
+        material_id=uuid.UUID(ink["id"]), quantity=100, unit_cost=0.10, warehouse_id=wid
+    )
+
+    # labor = 0.1h * 30 = 3.00
+    recipe = await svc.create_recipe(labor_minutes=6, labor_rate_per_hour=30)
+    await svc.add_recipe_line(  # 1 * 0.20
+        recipe_id=uuid.UUID(recipe["id"]), material_id=uuid.UUID(card["id"]), qty_per_unit=1
+    )
+    await svc.add_recipe_line(  # 2 * 0.10
+        recipe_id=uuid.UUID(recipe["id"]), material_id=uuid.UUID(ink["id"]), qty_per_unit=2
+    )
+    variation = await svc.create_variation(
+        sku="VAR-C", base_price=10.0, recipe_id=uuid.UUID(recipe["id"])
+    )
+
+    cogs = await svc.unit_cogs(uuid.UUID(variation["id"]))
+    # 0.20 + 0.20 + 3.00 = 3.40
+    assert cogs == pytest.approx(3.40)
+
+
+@pytest.mark.asyncio
+async def test_unit_cogs_zero_when_no_recipe(db_session) -> None:
+    svc = MakerService(session=db_session)
+    variation = await svc.create_variation(sku="VAR-NORECIPE", base_price=5.0)
+    cogs = await svc.unit_cogs(uuid.UUID(variation["id"]))
+    assert cogs == 0.0
+
+
+@pytest.mark.asyncio
+async def test_unit_cogs_labor_only_recipe(db_session) -> None:
+    svc = MakerService(session=db_session)
+    recipe = await svc.create_recipe(labor_minutes=30, labor_rate_per_hour=20)  # 0.5h * 20 = 10.00
+    variation = await svc.create_variation(
+        sku="VAR-LABOR-ONLY", base_price=15.0, recipe_id=uuid.UUID(recipe["id"])
+    )
+    cogs = await svc.unit_cogs(uuid.UUID(variation["id"]))
+    assert cogs == pytest.approx(10.00)
