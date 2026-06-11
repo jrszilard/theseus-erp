@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
@@ -15,6 +15,13 @@ from theseus.web.templating import templates
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+class _TallyLine(NamedTuple):
+    variation_id: uuid.UUID
+    channel_id: uuid.UUID
+    quantity: float
+    unit_price: float
+
 
 router = APIRouter(tags=["web"])
 
@@ -115,9 +122,12 @@ async def market_tally(request: Request, market_event_id: uuid.UUID,
     try:
         lines = json.loads(session_data)
         params = [
-            {"i": uuid.uuid4(), "q": float(ln["quantity"]), "p": float(ln["unit_price"]),
-             "v": uuid.UUID(ln["variation_id"]), "c": uuid.UUID(ln["channel_id"]),
-             "m": market_event_id}
+            _TallyLine(
+                variation_id=uuid.UUID(ln["variation_id"]),
+                channel_id=uuid.UUID(ln["channel_id"]),
+                quantity=float(ln["quantity"]),
+                unit_price=float(ln["unit_price"]),
+            )
             for ln in lines
         ]
     except (json.JSONDecodeError, KeyError, ValueError, TypeError) as exc:
@@ -130,12 +140,9 @@ async def market_tally(request: Request, market_event_id: uuid.UUID,
     svc = MakerService(session=session)
     for p in params:
         await svc.record_sale(
-            variation_id=uuid.UUID(str(p["v"])),
-            channel_id=uuid.UUID(str(p["c"])),
-            quantity=float(p["q"]),  # type: ignore[arg-type]
-            unit_price=float(p["p"]),  # type: ignore[arg-type]
-            source="tally",
-            market_event_id=market_event_id,
+            variation_id=p.variation_id, channel_id=p.channel_id,
+            quantity=p.quantity, unit_price=p.unit_price,
+            source="tally", market_event_id=market_event_id,
         )
     await session.commit()
     view = await read_models.get_market_day(session, market_event_id)
