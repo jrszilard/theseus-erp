@@ -99,3 +99,12 @@ async def test_version_compare_sums_units_and_revenue(db_session) -> None:
     rows = await MakerInsights(session=db_session).version_compare(product_id)
     assert rows[0]["units"] == 3.0
     assert rows[0]["revenue"] == 75.0  # 3 x 25
+
+
+@pytest.mark.asyncio
+async def test_version_compare_zero_sales_returns_zero(db_session) -> None:
+    design_id, _ = await _design_with_variation(db_session, on_hand=5, reorder=0, sold=0)
+    product_id = (await db_session.execute(text(
+        "SELECT id FROM maker_product WHERE design_id = :d"), {"d": design_id})).scalar()
+    rows = await MakerInsights(session=db_session).version_compare(product_id)
+    assert rows and rows[0]["units"] == 0.0 and rows[0]["revenue"] == 0.0

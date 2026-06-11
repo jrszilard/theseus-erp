@@ -61,13 +61,15 @@ class MakerInsights:
         return out
 
     async def restock(self, warehouse_id: uuid.UUID | None = None) -> list[dict[str, Any]]:
+        # warehouse_id is accepted for forward-compat; get_stock_level currently aggregates
+        # across all warehouses, so it is not yet used.
         rows = (await self._session.execute(text(
             "SELECT id, name, reorder_point FROM inventory_stock_item "
             "WHERE category = 'raw_material' AND is_active = true ORDER BY name"
         ))).mappings().all()
         out: list[dict[str, Any]] = []
         for r in rows:
-            on_hand = await self._svc._inventory.get_stock_level(r["id"])
+            on_hand = await self._svc.material_on_hand(r["id"])
             reorder = float(r["reorder_point"] or 0)
             if on_hand > reorder:
                 continue

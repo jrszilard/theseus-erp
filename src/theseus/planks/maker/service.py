@@ -261,6 +261,10 @@ class MakerService:
             return 0.0
         return await self._inventory.get_stock_level(var_row["finished_stock_id"])
 
+    async def material_on_hand(self, material_id: uuid.UUID) -> float:
+        """On-hand stock level for a material (its own StockItem)."""
+        return await self._inventory.get_stock_level(material_id)
+
     async def run_production(
         self, *, variation_id: uuid.UUID, quantity: float, warehouse_id: uuid.UUID
     ) -> dict[str, Any]:
