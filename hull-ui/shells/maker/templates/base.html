@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en" data-theme="light" data-density="cozy">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Maker Edition{% endblock %}</title>
+  <link rel="stylesheet" href="/static/maker/maker.css">
+</head>
+<body>
+  <header class="app-bar">
+    <span class="brand">🪶 Maker Edition</span>
+    <nav class="app-nav">
+      <a href="/">Ideas</a>
+      <a href="/markets">Markets</a>
+    </nav>
+  </header>
+  <main class="app-main">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
