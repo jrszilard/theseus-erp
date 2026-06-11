@@ -168,6 +168,10 @@ async def capture_parse(request: Request, market_event_id: uuid.UUID,
 async def capture_commit(request: Request, market_event_id: uuid.UUID,
                          lines_json: str = Form(..., alias="lines"),
                          session: AsyncSession = Depends(get_session)) -> HTMLResponse:  # noqa: B008
+    exists = (await session.execute(
+        text("SELECT 1 FROM maker_market_event WHERE id = :m"), {"m": market_event_id})).scalar()
+    if exists is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="market not found")
     try:
         items = json.loads(lines_json)
         parsed = [(uuid.UUID(i["variation_id"]), float(i["quantity"]), float(i["unit_price"]))
@@ -182,10 +186,14 @@ async def capture_commit(request: Request, market_event_id: uuid.UUID,
                             detail="no channel configured")
     channel: uuid.UUID = uuid.UUID(str(channel_raw))
     svc = MakerService(session=session)
-    for variation_id, quantity, unit_price in parsed:
-        await svc.record_sale(variation_id=variation_id, channel_id=channel,
-                              quantity=quantity, unit_price=unit_price,
-                              source="shipwright_nl", market_event_id=market_event_id)
+    try:
+        for variation_id, quantity, unit_price in parsed:
+            await svc.record_sale(variation_id=variation_id, channel_id=channel,
+                                  quantity=quantity, unit_price=unit_price,
+                                  source="shipwright_nl", market_event_id=market_event_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail="invalid capture payload") from exc
     await session.commit()
     view = await read_models.get_market_day(session, market_event_id)
     return templates.TemplateResponse(request, "partials/_market_lines.html", {"market": view})

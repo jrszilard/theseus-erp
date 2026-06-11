@@ -70,14 +70,15 @@ document.addEventListener('click', (e) => {
   const lines = [...form.querySelectorAll('[data-capture-line]')].map((row) => ({
     variation_id: row.dataset.variation,
     quantity: row.querySelector('[name="quantity"]').value,
-    unit_price: row.querySelector('[name="unit_price"]').value || row.querySelector('[name="quantity"]').dataset.price || '0',
+    unit_price: row.querySelector('[name="unit_price"]').value || '0',
   }));
   const body = new URLSearchParams({ lines: JSON.stringify(lines) });
   fetch(form.dataset.captureCommit, { method: 'POST', body })
-    .then((r) => r.text())
+    .then((r) => { if (!r.ok) throw new Error('commit failed'); return r.text(); })
     .then((html) => {
       const lm = document.querySelector('#market-lines');
       if (lm) lm.outerHTML = html;
       form.innerHTML = '<p class="muted">Recorded.</p>';
-    });
+    })
+    .catch(() => { form.innerHTML = '<p class="muted">Could not record — try again.</p>'; });
 });

@@ -70,3 +70,23 @@ async def test_capture_commit_malformed_returns_422(client, maker_seed) -> None:
     me = maker_seed["market_event_id"]
     resp = await client.post(f"/markets/{me}/capture/commit", data={"lines": "not-json{{"})
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_capture_commit_unknown_market_returns_404(client) -> None:
+    import uuid as _uuid
+
+    random_market = str(_uuid.uuid4())
+    payload = json.dumps([{"variation_id": str(_uuid.uuid4()), "quantity": 1, "unit_price": 10}])
+    resp = await client.post(f"/markets/{random_market}/capture/commit", data={"lines": payload})
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_capture_commit_unknown_variation_returns_422(client, maker_seed) -> None:
+    import uuid as _uuid
+
+    me = maker_seed["market_event_id"]
+    payload = json.dumps([{"variation_id": str(_uuid.uuid4()), "quantity": 1, "unit_price": 10}])
+    resp = await client.post(f"/markets/{me}/capture/commit", data={"lines": payload})
+    assert resp.status_code == 422
