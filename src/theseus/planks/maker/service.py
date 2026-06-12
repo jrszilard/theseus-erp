@@ -11,6 +11,8 @@ from theseus.keel.event_store.store import PostgresEventStore
 from theseus.planks.inventory.service import InventoryService
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -28,19 +30,34 @@ class MakerService:
 
     # ---- entity create-helpers (FK-aware; the generic router cannot set FKs) ----
 
-    async def create_material(self, *, sku: str, name: str, unit: str = "each") -> dict[str, Any]:
+    async def create_material(self, *, sku: str, name: str, unit: str = "each",
+                              reorder_point: float = 0) -> dict[str, Any]:
         """A material is an inventory StockItem with category 'raw_material'."""
         return await self._inventory.create_stock_item(
-            sku=sku, name=name, category="raw_material", unit_of_measure=unit,
+            sku=sku, name=name, category="raw_material",
+            unit_of_measure=unit, reorder_point=reorder_point,
         )
 
     async def create_finished_good(
-        self, *, sku: str, name: str, unit: str = "each"
+        self, *, sku: str, name: str, unit: str = "each", reorder_point: float = 0
     ) -> dict[str, Any]:
         """A variation's sellable stock is an inventory StockItem with category 'finished_good'."""
         return await self._inventory.create_stock_item(
-            sku=sku, name=name, category="finished_good", unit_of_measure=unit,
+            sku=sku, name=name, category="finished_good",
+            unit_of_measure=unit, reorder_point=reorder_point,
         )
+
+    async def set_reorder_point(self, stock_item_id: uuid.UUID, value: float) -> dict[str, Any]:
+        """Update the reorder_point for a stock item (material or finished good)."""
+        if value < 0:
+            msg = "reorder_point must be >= 0"
+            raise ValueError(msg)
+        await self._session.execute(
+            text("UPDATE inventory_stock_item SET reorder_point = :r WHERE id = :i"),
+            {"r": value, "i": stock_item_id},
+        )
+        await self._session.flush()
+        return {"id": str(stock_item_id), "reorder_point": value}
 
     async def create_recipe(
         self, *, labor_minutes: float = 0, labor_rate_per_hour: float = 0
@@ -244,6 +261,10 @@ class MakerService:
             return 0.0
         return await self._inventory.get_stock_level(var_row["finished_stock_id"])
 
+    async def material_on_hand(self, material_id: uuid.UUID) -> float:
+        """On-hand stock level for a material (its own StockItem)."""
+        return await self._inventory.get_stock_level(material_id)
+
     async def run_production(
         self, *, variation_id: uuid.UUID, quantity: float, warehouse_id: uuid.UUID
     ) -> dict[str, Any]:
@@ -298,6 +319,89 @@ class MakerService:
             entity_id=run_id,
             data={"variation_id": str(variation_id), "quantity": quantity,
                   "unit_cogs_snapshot": unit_cogs, "total_cogs": total_cogs},
+        )
+        await self._session.flush()
+        return _row_to_dict(result.mappings().one())
+
+    async def promote_version(self, version_id: uuid.UUID) -> dict[str, Any]:
+        """Promote a draft version to current and retire the previously-current one, in one
+        transaction (keeps the 'exactly one current per product' invariant). No-op if already
+        current; raises if the target is retired."""
+        row = (await self._session.execute(text(
+            "SELECT id, product_id, status FROM maker_product_version WHERE id = :v"
+        ), {"v": version_id})).mappings().one_or_none()
+        if row is None:
+            msg = f"Version {version_id} not found"
+            raise ValueError(msg)
+        if row["status"] == "current":
+            return {"id": str(version_id), "status": "current"}
+        if row["status"] != "draft":
+            msg = f"Version {version_id} is {row['status']}, not a draft"
+            raise ValueError(msg)
+
+        await self._session.execute(text(
+            "UPDATE maker_product_version SET status = 'retired' "
+            "WHERE product_id = :p AND status = 'current'"), {"p": row["product_id"]})
+        await self._session.execute(text(
+            "UPDATE maker_product_version SET status = 'current' WHERE id = :v"), {"v": version_id})
+        await emit_entity_event(
+            store=self._store, action="promoted", plank="maker", entity="ProductVersion",
+            entity_id=version_id, data={"product_id": str(row["product_id"])},
+        )
+        await self._session.flush()
+        return {"id": str(version_id), "status": "current"}
+
+    async def record_sale(
+        self, *, variation_id: uuid.UUID, channel_id: uuid.UUID,
+        quantity: float, unit_price: float, source: str,
+        market_event_id: uuid.UUID | None = None,
+        warehouse_id: uuid.UUID | None = None,
+        sale_date: datetime | None = None,
+    ) -> dict[str, Any]:
+        """The single sale write-path: validate, compute channel fees, append the
+        maker_sale row, decrement finished stock (no oversell block — reality wins),
+        and emit a Sale audit event. flush(); the caller commits."""
+        var_row = await self._get_variation_row(variation_id)
+        if var_row is None:
+            msg = f"Variation {variation_id} not found"
+            raise ValueError(msg)
+        ch = (await self._session.execute(
+            text("SELECT fee_percent, fee_fixed FROM maker_channel WHERE id = :c"),
+            {"c": channel_id},
+        )).mappings().one_or_none()
+        if ch is None:
+            msg = f"Channel {channel_id} not found"
+            raise ValueError(msg)
+
+        gross = quantity * unit_price
+        fees = float(round(
+            Decimal(str(ch["fee_percent"] or 0)) / 100 * Decimal(str(gross))
+            + Decimal(str(ch["fee_fixed"] or 0)), 4))
+
+        sale_id = uuid.uuid4()
+        result = await self._session.execute(text(
+            "INSERT INTO maker_sale (id, quantity, unit_price, fees, sale_date, source, "
+            "variation_id, channel_id, market_event_id) "
+            "VALUES (:i, :q, :p, :f, COALESCE(CAST(:d AS timestamptz), now()), :src, :v, :c, :m) "
+            "RETURNING *"
+        ), {"i": sale_id, "q": quantity, "p": unit_price, "f": fees, "d": sale_date,
+            "src": source, "v": variation_id, "c": channel_id, "m": market_event_id})
+
+        if var_row["finished_stock_id"] is not None:
+            wh = warehouse_id or (await self._session.execute(
+                text("SELECT id FROM inventory_warehouse ORDER BY created_at LIMIT 1")
+            )).scalar()
+            if wh is not None:
+                await self._inventory.record_movement(
+                    stock_item_id=var_row["finished_stock_id"], warehouse_id=wh,
+                    movement_type="adjusted", quantity=-quantity, reference="sale",
+                )
+
+        await emit_entity_event(
+            store=self._store, action="recorded", plank="maker", entity="Sale",
+            entity_id=sale_id,
+            data={"variation_id": str(variation_id), "channel_id": str(channel_id),
+                  "quantity": quantity, "unit_price": unit_price, "fees": fees, "source": source},
         )
         await self._session.flush()
         return _row_to_dict(result.mappings().one())

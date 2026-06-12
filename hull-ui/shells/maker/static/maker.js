@@ -60,3 +60,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // ---- progressive collapse: a singular <details> opens by default (handled in templates) ----
 });
+
+// NL capture: serialize confirm rows -> one JSON POST to /capture/commit
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-capture-submit]');
+  if (!btn) return;
+  const form = btn.closest('[data-capture-commit]');
+  if (!form) return;
+  const lines = [...form.querySelectorAll('[data-capture-line]')].map((row) => ({
+    variation_id: row.dataset.variation,
+    quantity: row.querySelector('[name="quantity"]').value,
+    unit_price: row.querySelector('[name="unit_price"]').value || '0',
+  }));
+  const body = new URLSearchParams({ lines: JSON.stringify(lines) });
+  fetch(form.dataset.captureCommit, { method: 'POST', body })
+    .then((r) => { if (!r.ok) throw new Error('commit failed'); return r.text(); })
+    .then((html) => {
+      const lm = document.querySelector('#market-lines');
+      if (lm) lm.outerHTML = html;
+      form.innerHTML = '<p class="muted">Recorded.</p>';
+    })
+    .catch(() => { form.innerHTML = '<p class="muted">Could not record — try again.</p>'; });
+});

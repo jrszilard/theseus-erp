@@ -7,6 +7,39 @@
 
 {% include 'partials/_bom_numbers.html' %}
 
+{% if bom.lines %}
+{% call ui.card(title='Reorder thresholds — materials') %}
+  <table class="var-table">
+    <thead><tr><th>Material</th><th>On hand</th><th>Low at</th></tr></thead>
+    <tbody>
+    {% for line in bom.lines %}
+    <tr{% if line.low %} class="low"{% endif %}>
+      <td>{{ line.material }}</td>
+      <td>{{ line.in_stock }}</td>
+      <td>
+        <form method="post" action="/bom/{{ bom.variation_id }}/reorder" class="reorder-mini">
+          <input type="hidden" name="stock_item_id" value="{{ line.material_id }}">
+          <input type="number" name="value" value="{{ line.reorder_point }}" aria-label="low at" class="reorder-input" min="0" step="any">
+          <button class="btn" type="submit">low at</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% endcall %}
+{% endif %}
+
+{% if bom.finished_stock_id %}
+{% call ui.card(title='Reorder threshold — finished stock') %}
+  <form method="post" action="/bom/{{ bom.variation_id }}/reorder" class="reorder-mini">
+    <input type="hidden" name="stock_item_id" value="{{ bom.finished_stock_id }}">
+    <input type="number" name="value" value="{{ bom.finished_reorder_point }}" aria-label="finished low at" class="reorder-input" min="0" step="any">
+    <button class="btn" type="submit">low at</button>
+  </form>
+{% endcall %}
+{% endif %}
+
 {% call ui.card(title='Make a production run') %}
   <form hx-post="/bom/{{ bom.variation_id }}/run" hx-target="#bom-numbers" hx-swap="outerHTML">
     {{ ui.input(name='quantity', value='8', type='number') }}
@@ -16,4 +49,14 @@
   <p class="muted">Decrements materials, adds finished stock, and snapshots today's COGS as an event.</p>
 {% endcall %}
 <p><a href="#">↗ Open full Materials catalog</a> <span class="muted">(coming later)</span></p>
+{% endblock %}
+
+{% block shipwright %}
+  {% if restock %}
+    {% for r in restock %}
+    <div class="sw-bubble sw-warn">{{ r.nudge }}</div>
+    {% endfor %}
+  {% else %}
+    <div class="sw-bubble sw-info">Materials stocked up — no restock nudges.</div>
+  {% endif %}
 {% endblock %}

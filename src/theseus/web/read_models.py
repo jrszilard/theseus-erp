@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import uuid  # noqa: TC003
+import uuid
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import text
 
+from theseus.planks.maker.insights import MakerInsights
 from theseus.planks.maker.service import MakerService
 
 if TYPE_CHECKING:
@@ -94,10 +95,21 @@ async def get_design_detail(session: AsyncSession, design_id: uuid.UUID) -> dict
         "GROUP BY c.name ORDER BY units DESC"
     ), {"d": design_id})).mappings().all()
 
+    insights = MakerInsights(session=session)
+    make_more = await insights.make_more(design_id)
+    promote = await insights.promotion_candidates(design_id)
+    version_rows: list[dict[str, Any]] = []
+    for pv in product_views:
+        version_rows.append({"product": pv["name"],
+                             "versions": await insights.version_compare(uuid.UUID(pv["id"]))})
+
     return {
         "id": str(design["id"]), "title": design["title"], "status": design["status"],
         "products": product_views,
         "channels": [{"label": c["channel"], "value": float(c["units"])} for c in channels],
+        "make_more": make_more,
+        "promote": promote,
+        "version_compare": version_rows,
     }
 
 
@@ -128,8 +140,9 @@ async def get_bom_view(session: AsyncSession, variation_id: uuid.UUID) -> dict[s
             wac = await svc.weighted_average_cost(ln["material_id"])
             qpu = float(ln["qty_per_unit"])
             lines.append({
-                "material": ln["material"], "qty_per_unit": qpu, "in_stock": stock,
-                "wac": wac, "line_cost": qpu * wac,
+                "material": ln["material"], "material_id": str(ln["material_id"]),
+                "qty_per_unit": qpu, "in_stock": stock, "wac": wac, "line_cost": qpu * wac,
+                "reorder_point": float(ln["reorder_point"] or 0),
                 "low": stock <= float(ln["reorder_point"] or 0),
             })
 
@@ -141,11 +154,19 @@ async def get_bom_view(session: AsyncSession, variation_id: uuid.UUID) -> dict[s
         return (x["in_stock"] / x["qty_per_unit"]) if x["qty_per_unit"] else float("inf")
 
     limiting = min(lines, key=_stock_ratio)["material"] if lines else None
+
+    fg = (await session.execute(text(
+        "SELECT si.id, si.reorder_point FROM maker_variation v "
+        "JOIN inventory_stock_item si ON si.id = v.finished_stock_id WHERE v.id = :v"
+    ), {"v": variation_id})).mappings().one_or_none()
+
     return {
         "variation_id": str(variation_id), "sku": v["sku"], "lines": lines, "labor": labor,
         "cogs": cogs, "buildable": buildable, "limiting_material": limiting,
         "price": price, "profit": profit,
         "margin": (profit / price * 100) if price else 0,
+        "finished_stock_id": str(fg["id"]) if fg else "",
+        "finished_reorder_point": float(fg["reorder_point"] or 0) if fg else 0,
     }
 
 

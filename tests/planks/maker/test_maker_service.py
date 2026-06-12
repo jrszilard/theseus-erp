@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 import pytest
 from sqlalchemy import text
@@ -289,3 +290,186 @@ async def test_run_production_without_recipe_adds_stock_zero_cogs(db_session) ->
     assert run["unit_cogs_snapshot"] == pytest.approx(0.0)
     assert run["total_cogs"] == pytest.approx(0.0)
     assert await svc.variation_on_hand(vid) == 3.0
+
+
+async def _seed_sale_graph(db_session):
+    """Minimal channel + variation-with-finished-stock + warehouse for sale tests."""
+    svc = MakerService(session=db_session)
+    wh = await svc._inventory.create_warehouse(name="Studio", code="RS-STUDIO")
+    wid = uuid.UUID(wh["id"])
+    fg = await svc.create_finished_good(sku="RS-FG", name="Loon 8x10")
+    var = await svc.create_variation(sku="RS-8x10", base_price=25.0,
+                                     finished_stock_id=uuid.UUID(fg["id"]))
+    await svc.run_production(variation_id=uuid.UUID(var["id"]), quantity=10, warehouse_id=wid)
+    ch_id = uuid.uuid4()
+    await db_session.execute(text(
+        "INSERT INTO maker_channel (id, name, fee_percent, fee_fixed, is_active) "
+        "VALUES (:i, 'Etsy', 6.5, 0.20, true)"), {"i": ch_id})
+    await db_session.flush()
+    return uuid.UUID(var["id"]), ch_id, wid
+
+
+@pytest.mark.asyncio
+async def test_record_sale_computes_channel_fees(db_session) -> None:
+    var_id, ch_id, _ = await _seed_sale_graph(db_session)
+    svc = MakerService(session=db_session)
+    sale = await svc.record_sale(variation_id=var_id, channel_id=ch_id,
+                                 quantity=2, unit_price=25.0, source="manual")
+    # 6.5% of 50 + 0.20 fixed = 3.45
+    assert float(sale["fees"]) == pytest.approx(3.45)
+    assert sale["source"] == "manual"
+
+
+@pytest.mark.asyncio
+async def test_record_sale_decrements_finished_stock(db_session) -> None:
+    var_id, ch_id, _ = await _seed_sale_graph(db_session)
+    svc = MakerService(session=db_session)
+    assert await svc.variation_on_hand(var_id) == 10
+    await svc.record_sale(variation_id=var_id, channel_id=ch_id,
+                          quantity=3, unit_price=25.0, source="tally")
+    assert await svc.variation_on_hand(var_id) == 7
+
+
+@pytest.mark.asyncio
+async def test_record_sale_allows_oversell(db_session) -> None:
+    var_id, ch_id, _ = await _seed_sale_graph(db_session)
+    svc = MakerService(session=db_session)
+    await svc.record_sale(variation_id=var_id, channel_id=ch_id,
+                          quantity=12, unit_price=25.0, source="manual")  # only 10 on hand
+    assert await svc.variation_on_hand(var_id) == -2  # reality wins, no error
+
+
+@pytest.mark.asyncio
+async def test_record_sale_emits_event(db_session) -> None:
+    from theseus.keel.event_store.store import PostgresEventStore
+    var_id, ch_id, _ = await _seed_sale_graph(db_session)
+    svc = MakerService(session=db_session)
+    await svc.record_sale(variation_id=var_id, channel_id=ch_id,
+                          quantity=1, unit_price=25.0, source="shipwright_nl")
+    store = PostgresEventStore(session=db_session)
+    events = await store.get_events_by_type("maker.Sale.recorded")
+    assert any(e.data.get("source") == "shipwright_nl" for e in events)
+
+
+@pytest.mark.asyncio
+async def test_record_sale_unknown_channel_raises(db_session) -> None:
+    var_id, _, _ = await _seed_sale_graph(db_session)
+    svc = MakerService(session=db_session)
+    with pytest.raises(ValueError, match="Channel"):
+        await svc.record_sale(variation_id=var_id, channel_id=uuid.uuid4(),
+                              quantity=1, unit_price=25.0, source="manual")
+
+
+@pytest.mark.asyncio
+async def test_record_sale_unknown_variation_raises(db_session) -> None:
+    _, ch_id, _ = await _seed_sale_graph(db_session)
+    svc = MakerService(session=db_session)
+    with pytest.raises(ValueError, match="Variation"):
+        await svc.record_sale(variation_id=uuid.uuid4(), channel_id=ch_id,
+                              quantity=1, unit_price=25.0, source="manual")
+
+
+@pytest.mark.asyncio
+async def test_record_sale_stores_explicit_sale_date(db_session) -> None:
+    var_id, ch_id, _ = await _seed_sale_graph(db_session)
+    svc = MakerService(session=db_session)
+    explicit_date = datetime(2025, 1, 2, 12, 0)
+    sale = await svc.record_sale(variation_id=var_id, channel_id=ch_id,
+                                 quantity=1, unit_price=25.0, source="manual",
+                                 sale_date=explicit_date)
+    row = await db_session.execute(
+        text("SELECT sale_date FROM maker_sale WHERE id = :id"),
+        {"id": uuid.UUID(sale["id"])},
+    )
+    stored = row.scalar()
+    assert stored.date() == explicit_date.date()
+
+
+@pytest.mark.asyncio
+async def test_create_material_sets_reorder_point(db_session) -> None:
+    svc = MakerService(session=db_session)
+    mat = await svc.create_material(sku="RP-CARD", name="Card", unit="sheet", reorder_point=15)
+    assert float(mat["reorder_point"]) == 15
+
+
+@pytest.mark.asyncio
+async def test_set_reorder_point_updates_item(db_session) -> None:
+    import uuid as _uuid
+
+    from sqlalchemy import text
+    svc = MakerService(session=db_session)
+    mat = await svc.create_material(sku="RP-INK", name="Ink", unit="ml")
+    await svc.set_reorder_point(_uuid.UUID(mat["id"]), 20)
+    rp = (await db_session.execute(
+        text("SELECT reorder_point FROM inventory_stock_item WHERE id = :i"),
+        {"i": _uuid.UUID(mat["id"])})).scalar()
+    assert float(rp) == 20
+
+
+@pytest.mark.asyncio
+async def test_set_reorder_point_rejects_negative(db_session) -> None:
+    import uuid as _uuid
+    svc = MakerService(session=db_session)
+    mat = await svc.create_material(sku="RP-NEG", name="Neg", unit="ml")
+    with pytest.raises(ValueError, match="reorder_point"):
+        await svc.set_reorder_point(_uuid.UUID(mat["id"]), -5)
+
+
+async def _product_with_two_versions(db_session):
+    import uuid as _uuid
+    pid, cur, draft, fmt = _uuid.uuid4(), _uuid.uuid4(), _uuid.uuid4(), _uuid.uuid4()
+    did = _uuid.uuid4()
+    await db_session.execute(
+        text("INSERT INTO maker_format (id,name,default_unit) VALUES (:i,'F','each')"),
+        {"i": fmt},
+    )
+    await db_session.execute(
+        text("INSERT INTO maker_design (id,title,slug,status) VALUES (:i,'D',:s,'released')"),
+        {"i": did, "s": f"pv{_uuid.uuid4().hex[:6]}"},
+    )
+    await db_session.execute(
+        text("INSERT INTO maker_product (id,name,design_id,format_id) VALUES (:i,'P',:d,:f)"),
+        {"i": pid, "d": did, "f": fmt},
+    )
+    await db_session.execute(
+        text("INSERT INTO maker_product_version (id,number,status,product_id)"
+             " VALUES (:i,1,'current',:p)"),
+        {"i": cur, "p": pid},
+    )
+    await db_session.execute(
+        text("INSERT INTO maker_product_version (id,number,status,product_id)"
+             " VALUES (:i,2,'draft',:p)"),
+        {"i": draft, "p": pid},
+    )
+    await db_session.flush()
+    return pid, cur, draft
+
+
+@pytest.mark.asyncio
+async def test_promote_version_flips_and_retires(db_session) -> None:
+    _, cur, draft = await _product_with_two_versions(db_session)
+    svc = MakerService(session=db_session)
+    await svc.promote_version(draft)
+    statuses = dict((str(r["id"]), r["status"]) for r in (await db_session.execute(text(
+        "SELECT id, status FROM maker_product_version WHERE id IN (:a, :b)"),
+        {"a": cur, "b": draft})).mappings().all())
+    assert statuses[str(draft)] == "current"
+    assert statuses[str(cur)] == "retired"
+
+
+@pytest.mark.asyncio
+async def test_promote_non_draft_raises(db_session) -> None:
+    _, cur, draft = await _product_with_two_versions(db_session)
+    svc = MakerService(session=db_session)
+    await svc.promote_version(cur)      # already current -> no-op, no raise
+    await svc.promote_version(draft)    # promotes draft; retires `cur` via the service
+    with pytest.raises(ValueError, match="not a draft"):
+        await svc.promote_version(cur)  # cur is now retired-by-promotion
+
+
+@pytest.mark.asyncio
+async def test_promote_version_not_found_raises(db_session) -> None:
+    import uuid as _uuid
+    svc = MakerService(session=db_session)
+    with pytest.raises(ValueError, match="not found"):
+        await svc.promote_version(_uuid.uuid4())
