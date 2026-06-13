@@ -77,3 +77,28 @@ def test_boot_guard_rejects_longer_default_secret() -> None:
     import pytest as _pytest
     with _pytest.raises(RuntimeError):
         check_production_safety(s)
+
+
+def test_boot_guard_rejects_replace_placeholder_secret() -> None:
+    from theseus.config import Settings
+    s = Settings(
+        enforce_production=True,
+        secret_key="REPLACE_ME",
+        storage_access_key="real", storage_secret_key="real",
+        database_url="postgresql+asyncpg://theseus:realpw@db:5432/theseus",
+    )
+    import pytest as _pytest
+    with _pytest.raises(RuntimeError):
+        check_production_safety(s)
+
+
+def test_boot_guard_rejects_replace_placeholder_in_db_url() -> None:
+    from theseus.config import Settings
+    s = Settings(
+        enforce_production=True,
+        secret_key="a-real-secret-value", storage_access_key="real", storage_secret_key="real",
+        database_url="postgresql+asyncpg://theseus:REPLACE_ME@db:5432/theseus",
+    )
+    import pytest as _pytest
+    with _pytest.raises(RuntimeError):
+        check_production_safety(s)

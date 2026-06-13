@@ -58,6 +58,11 @@ def check_production_safety(settings: Settings) -> None:
     ]
     if "theseus:theseus@" in settings.database_url:
         offenders.append("database_url (default password)")
+    placeholder = "REPLACE"
+    for field in ("secret_key", "storage_access_key", "storage_secret_key", "database_url"):
+        value = getattr(settings, field)
+        if placeholder in value.upper() and field not in offenders:
+            offenders.append(f"{field} (unreplaced placeholder)")
     if offenders:
         raise RuntimeError(
             "Refusing to start: default values for "
