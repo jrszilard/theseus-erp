@@ -21,6 +21,8 @@ async def seed_pack(
     """Load planks/<pack>/seeds/defaults.yaml and insert records idempotently.
 
     Returns {full_name: {"created": n, "skipped": m}}. Does NOT commit.
+    Each seeded blueprint must declare a unique field (used as the idempotency key);
+    a missing pack seed file is a no-op returning {}.
     """
     path = planks_dir / pack / "seeds" / "defaults.yaml"
     if not path.exists():
@@ -33,8 +35,13 @@ async def seed_pack(
         bp = registry.get(full_name)
         if bp is None:
             raise ValueError(f"Seed references unknown blueprint '{full_name}'")
+        if not any(f.unique for f in bp.fields.values()):
+            raise ValueError(
+                f"Cannot idempotently seed '{full_name}': it has no unique field "
+                "to use as a natural key."
+            )
         created = skipped = 0
-        for record in records:
+        for record in (records or []):
             if await find_existing_by_unique(session, bp, record) is not None:
                 skipped += 1
                 continue

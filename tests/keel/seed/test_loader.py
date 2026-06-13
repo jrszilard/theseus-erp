@@ -36,3 +36,23 @@ async def test_seed_pack_inserts_and_is_idempotent(db_session) -> None:
     assert second["maker.Channel"]["created"] == 0
     assert second["maker.Channel"]["skipped"] == 4
     assert await _count(db_session, "maker_channel") == chan_before
+    assert second["maker.Format"]["created"] == 0
+    assert second["maker.Format"]["skipped"] == 5
+
+
+@pytest.mark.asyncio
+async def test_seed_pack_missing_file_is_noop(db_session, tmp_path) -> None:
+    registry = build_registry()
+    # tmp_path has no <pack>/seeds/defaults.yaml → returns {} without error.
+    result = await seed_pack(db_session, registry, "maker", planks_dir=tmp_path)
+    assert result == {}
+
+
+@pytest.mark.asyncio
+async def test_seed_pack_unknown_blueprint_raises(db_session, tmp_path) -> None:
+    registry = build_registry()
+    seeds = tmp_path / "fakepack" / "seeds"
+    seeds.mkdir(parents=True)
+    (seeds / "defaults.yaml").write_text("nonexistent.Entity:\n  - name: x\n")
+    with pytest.raises(ValueError):
+        await seed_pack(db_session, registry, "fakepack", planks_dir=tmp_path)
