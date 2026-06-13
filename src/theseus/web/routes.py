@@ -54,6 +54,8 @@ async def create_design(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="title required"
         )
     slug = re.sub(r"[^a-z0-9]+", "-", clean.lower()).strip("-") or "design"
+    # build_registry() (not get_registry()): reads blueprints from disk so this works
+    # regardless of the app-state registry — the test harness registers only a minimal set.
     registry = build_registry()
     bp = registry.get("maker.Design")
     row = await insert_entity(session, bp, {"title": clean, "slug": slug, "status": "idea"})
