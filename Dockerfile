@@ -17,7 +17,6 @@ RUN pip install . --target=/install
 FROM base AS runtime
 
 COPY --from=builder /install /usr/local/lib/python3.12/site-packages
-COPY src/ /app/src/
 COPY alembic/ /app/alembic/
 COPY alembic.ini /app/
 # These three were missing — the app needs them at runtime:

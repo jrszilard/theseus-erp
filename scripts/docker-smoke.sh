@@ -21,10 +21,12 @@ docker run -d --name "$DB" --network "$NET" \
   postgres:16-alpine >/dev/null
 
 echo "[smoke] waiting for postgres…"
+pg_ready=""
 for _ in $(seq 1 30); do
-  docker exec "$DB" pg_isready -U theseus >/dev/null 2>&1 && break
+  docker exec "$DB" pg_isready -U theseus >/dev/null 2>&1 && { pg_ready=1; break; }
   sleep 1
 done
+[ -n "$pg_ready" ] || { echo "[smoke] FAIL: postgres never became ready"; docker logs "$DB"; exit 1; }
 
 docker run -d --name "$APP" --network "$NET" -p 8001:8000 \
   -e DATABASE_URL=postgresql+asyncpg://theseus:theseus@$DB:5432/theseus \
