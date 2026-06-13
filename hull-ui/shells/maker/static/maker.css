@@ -21,3 +21,6 @@
 .sale-form { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
 .reorder-mini { display: inline-flex; gap: var(--space-1); align-items: center; }
 .reorder-input { width: var(--space-8); }
+.welcome-panel { padding: var(--space-4); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); }
+.welcome-form { display: flex; flex-direction: column; gap: var(--space-2); margin-block: var(--space-4); }
+.welcome-next { margin-top: var(--space-2); }

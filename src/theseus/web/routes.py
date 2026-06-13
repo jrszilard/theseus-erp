@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import uuid
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -8,7 +9,9 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import text
 
+from theseus.bootstrap import build_registry
 from theseus.database import get_session
+from theseus.keel.entities.writer import insert_entity
 from theseus.keel.llm_gateway.gateway import LLMGateway
 from theseus.planks.maker.capture import llm_available, parse_sale_text
 from theseus.planks.maker.insights import MakerInsights
@@ -34,7 +37,28 @@ async def board(
     request: Request, session: AsyncSession = Depends(get_session)  # noqa: B008
 ) -> HTMLResponse:
     designs = await read_models.list_designs_for_board(session)
-    return templates.TemplateResponse(request, "board.html", {"designs": designs})
+    return templates.TemplateResponse(
+        request, "board.html", {"designs": designs, "show_welcome": not designs}
+    )
+
+
+@router.post("/designs")
+async def create_design(
+    request: Request,
+    title: str = Form(...),
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> RedirectResponse:
+    clean = title.strip()
+    if not clean:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="title required"
+        )
+    slug = re.sub(r"[^a-z0-9]+", "-", clean.lower()).strip("-") or "design"
+    registry = build_registry()
+    bp = registry.get("maker.Design")
+    row = await insert_entity(session, bp, {"title": clean, "slug": slug, "status": "idea"})
+    await session.commit()
+    return RedirectResponse(url=f"/designs/{row['id']}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @router.get("/designs/{design_id}", response_class=HTMLResponse)

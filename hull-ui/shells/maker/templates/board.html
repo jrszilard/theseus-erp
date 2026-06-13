@@ -4,10 +4,12 @@
 {% block content %}
 <h1>Ideas</h1>
 <div class="board-grid">
-  {% for d in designs %}
-    {{ mk.design_card(d) }}
+  {% if show_welcome %}
+    {% include 'partials/_welcome.html' %}
   {% else %}
-    <p class="muted">No designs yet.</p>
-  {% endfor %}
+    {% for d in designs %}
+      {{ mk.design_card(d) }}
+    {% endfor %}
+  {% endif %}
 </div>
 {% endblock %}
