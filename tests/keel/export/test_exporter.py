@@ -11,7 +11,7 @@ from theseus.keel.export.exporter import export_all
 
 
 @pytest.mark.asyncio
-async def test_export_writes_csv_and_assets(db_session, tmp_path, maker_seed) -> None:
+async def test_export_writes_csv_and_assets(db_session, tmp_path, export_seed) -> None:
     storage = LocalStorageBackend(root=str(tmp_path / "assets"))
     svc = AssetService(session=db_session, storage=storage)
     await svc.upload(filename="hello.txt", content_type="text/plain",
