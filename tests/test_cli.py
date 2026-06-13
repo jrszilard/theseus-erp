@@ -1,35 +1,68 @@
 import pytest
-from sqlalchemy import text
 
-from theseus.cli import run_seed
+import theseus.cli as cli
 
 
 @pytest.mark.asyncio
-async def test_run_seed_seeds_maker(db_session, monkeypatch) -> None:
-    # run_seed builds its own registry + tables; redirect its session + skip DDL.
-    import theseus.cli as cli
+async def test_run_seed_orchestrates_packs_and_commits_once(monkeypatch) -> None:
+    """run_seed splits packs, seeds each, commits once, merges summaries — no real DB."""
+    seeded: list[str] = []
+    committed = {"count": 0}
+
+    async def fake_seed_pack(session, registry, pack):
+        seeded.append(pack)
+        return {f"{pack}.Thing": {"created": 1, "skipped": 0}}
+
+    async def fake_create_all(registry):
+        return None
+
+    class _Session:
+        async def commit(self):
+            committed["count"] += 1
 
     class _Ctx:
-        def __init__(self, s):
-            self._s = s
         async def __aenter__(self):
-            return self._s
+            return _Session()
         async def __aexit__(self, *a):
             return False
 
-    def _fake_factory():
-        return _Ctx(db_session)
+    monkeypatch.setattr(cli, "seed_pack", fake_seed_pack)
+    monkeypatch.setattr(cli, "create_all_tables", fake_create_all)
+    monkeypatch.setattr(cli, "async_session_factory", lambda: _Ctx())
 
-    async def _noop(*_a, **_k):
+    summary = await cli.run_seed("maker, foo")
+
+    assert seeded == ["maker", "foo"]          # split + stripped + ordered
+    assert committed["count"] == 1             # single commit for all packs
+    assert summary == {
+        "maker.Thing": {"created": 1, "skipped": 0},
+        "foo.Thing": {"created": 1, "skipped": 0},
+    }
+
+
+@pytest.mark.asyncio
+async def test_run_seed_ignores_blank_pack_tokens(monkeypatch) -> None:
+    seeded: list[str] = []
+
+    async def fake_seed_pack(session, registry, pack):
+        seeded.append(pack)
+        return {}
+
+    async def fake_create_all(registry):
         return None
 
-    monkeypatch.setattr(cli, "async_session_factory", _fake_factory)
-    monkeypatch.setattr(cli, "create_all_tables", _noop)
+    class _Ctx:
+        async def __aenter__(self):
+            class _S:
+                async def commit(self_inner):
+                    return None
+            return _S()
+        async def __aexit__(self, *a):
+            return False
 
-    summary = await run_seed("maker")
-    # maker formats may already exist from prior tests on the shared session; assert presence not count.
-    rows = (await db_session.execute(
-        text("SELECT COUNT(*) FROM maker_format WHERE name = 'Sticker'")
-    )).scalar()
-    assert rows == 1
-    assert "maker.Format" in summary
+    monkeypatch.setattr(cli, "seed_pack", fake_seed_pack)
+    monkeypatch.setattr(cli, "create_all_tables", fake_create_all)
+    monkeypatch.setattr(cli, "async_session_factory", lambda: _Ctx())
+
+    await cli.run_seed("maker, , ,")
+    assert seeded == ["maker"]
