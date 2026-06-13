@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     # App
     log_level: str = "INFO"
     debug: bool = False
+    enforce_production: bool = False
 
     # Object storage (DAM)
     storage_backend: str = "minio"  # "minio" | "s3" | "local"

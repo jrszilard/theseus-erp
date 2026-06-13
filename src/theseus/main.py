@@ -7,10 +7,12 @@ from fastapi import FastAPI
 
 from theseus.api.dependencies import set_registry
 from theseus.api.middleware import RequestLoggingMiddleware
+from theseus.api.security import SameOriginMiddleware, check_production_safety
 from theseus.api.routes import assets, entities, health, maker, shipwright
 from theseus.web import routes as web_routes
 from theseus.web.templating import mount_static
 from theseus.bootstrap import build_registry, create_all_tables
+from theseus.config import settings
 from theseus.database import async_session_factory, engine
 from theseus.keel.knowledge_graph.graph import PostgresKnowledgeGraph
 from theseus.keel.knowledge_graph.registration import register_blueprints_in_graph
@@ -41,6 +43,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    check_production_safety(settings)
     app = FastAPI(
         title="Theseus ERP",
         description="An open-source, AI-first ERP for small manufacturing and trade businesses.",
@@ -48,6 +51,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.add_middleware(RequestLoggingMiddleware)
+    app.add_middleware(SameOriginMiddleware)
     app.include_router(health.router)
     app.include_router(entities.router)
     app.include_router(assets.router)
