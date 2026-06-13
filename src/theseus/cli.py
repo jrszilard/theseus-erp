@@ -6,6 +6,7 @@ import sys
 
 from theseus.bootstrap import build_registry, create_all_tables
 from theseus.database import async_session_factory
+from theseus.keel.export.exporter import export_all
 from theseus.keel.seed.loader import seed_pack
 
 
@@ -24,8 +25,6 @@ async def run_seed(packs: str) -> dict:
 
 
 async def run_export(out: str) -> str:
-    from theseus.keel.export.exporter import export_all  # Task 5 (lazy import)
-
     registry = build_registry()
     async with async_session_factory() as session:
         await export_all(session, registry, out)
