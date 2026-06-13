@@ -42,5 +42,38 @@ def test_boot_guard_passes_with_real_secret() -> None:
         secret_key="a-real-secret-value-not-the-default",
         storage_access_key="real-key",
         storage_secret_key="real-secret",
+        database_url="postgresql+asyncpg://real:realpw@localhost:5432/theseus",
     )
     check_production_safety(s)  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_no_sec_fetch_site_header_passes(client) -> None:
+    # Absent header (curl/API/old browsers) must pass — this is what keeps the guard API-safe.
+    resp = await client.post(
+        "/designs", data={"title": f"NoHeader {uuid.uuid4().hex[:6]}"},
+        follow_redirects=False,
+    )
+    assert resp.status_code != 403
+
+
+@pytest.mark.asyncio
+async def test_sec_fetch_site_none_is_allowed(client) -> None:
+    # 'none' = top-level navigation (bookmark/address bar) — must not be blocked.
+    resp = await client.post(
+        "/designs", data={"title": f"Nav {uuid.uuid4().hex[:6]}"},
+        headers={"Sec-Fetch-Site": "none"}, follow_redirects=False,
+    )
+    assert resp.status_code in (303, 422)
+
+
+def test_boot_guard_rejects_longer_default_secret() -> None:
+    from theseus.config import Settings
+    s = Settings(
+        enforce_production=True,
+        secret_key="change-me-in-production-use-openssl-rand-hex-32",
+        storage_access_key="real", storage_secret_key="real",
+    )
+    import pytest as _pytest
+    with _pytest.raises(RuntimeError):
+        check_production_safety(s)

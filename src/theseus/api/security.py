@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import logging
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from theseus.config import Settings
+
+logger = logging.getLogger("theseus.security")
 
 _SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 _ALLOWED_SITE = {"same-origin", "none"}
@@ -17,17 +21,25 @@ _DEFAULT_SECRETS = {
 
 
 class SameOriginMiddleware(BaseHTTPMiddleware):
-    """Block cross-site state-changing requests (CSRF defense for ambient basic-auth).
+    """Block cross-site state-changing requests (CSRF defense).
+
+    Defense-in-depth with the current JWT bearer auth (browsers don't auto-attach
+    bearer tokens cross-origin); becomes the primary CSRF control once the app sits
+    behind Caddy HTTP Basic Auth, whose ambient credentials a browser WOULD auto-send.
 
     Unsafe methods are rejected only when the browser explicitly reports the request
-    is cross-site via Sec-Fetch-Site. Non-browser clients (curl, old browsers) omit
-    the header and are unaffected — auth still gates them.
+    is cross-site via Sec-Fetch-Site (a forbidden header page JS cannot forge).
+    Non-browser clients (curl, API callers) omit the header and pass — auth gates them.
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:
         if request.method not in _SAFE_METHODS:
             site = request.headers.get("sec-fetch-site")
             if site is not None and site not in _ALLOWED_SITE:
+                logger.warning(
+                    "cross-site request blocked: %s %s (sec-fetch-site=%s)",
+                    request.method, request.url.path, site,
+                )
                 return JSONResponse({"detail": "cross-site request blocked"}, status_code=403)
         return await call_next(request)
 
@@ -41,6 +53,8 @@ def check_production_safety(settings: Settings) -> None:
         for field, defaults in _DEFAULT_SECRETS.items()
         if getattr(settings, field) in defaults
     ]
+    if "theseus:theseus@" in settings.database_url:
+        offenders.append("database_url (default password)")
     if offenders:
         raise RuntimeError(
             "Refusing to start: default values for "
