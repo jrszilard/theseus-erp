@@ -44,10 +44,14 @@ def main(argv: list[str] | None = None) -> int:
     export_p.add_argument("--out", required=True, help="output .zip path")
 
     args = parser.parse_args(argv)
-    if args.command == "seed":
-        asyncio.run(run_seed(args.packs))
-    elif args.command == "export":
-        asyncio.run(run_export(args.out))
+    try:
+        if args.command == "seed":
+            asyncio.run(run_seed(args.packs))
+        elif args.command == "export":
+            asyncio.run(run_export(args.out))
+    except Exception as exc:  # noqa: BLE001 — top-level CLI boundary: report and exit non-zero
+        print(f"[theseus] {args.command} failed: {exc}", file=sys.stderr)
+        return 1
     return 0
 
 

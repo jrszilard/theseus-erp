@@ -66,3 +66,42 @@ async def test_run_seed_ignores_blank_pack_tokens(monkeypatch) -> None:
 
     await cli.run_seed("maker, , ,")
     assert seeded == ["maker"]
+
+
+def test_main_seed_dispatches_to_run_seed(monkeypatch) -> None:
+    called = {}
+
+    async def fake_run_seed(packs):
+        called["packs"] = packs
+
+    def fake_run(coro):
+        # Capture the packs argument from the coroutine's frame locals before closing it,
+        # since closing the coroutine prevents its body from executing.
+        called["packs"] = coro.cr_frame.f_locals.get("packs")
+        coro.close()
+        called["ran"] = True
+
+    monkeypatch.setattr(cli, "run_seed", fake_run_seed)
+    monkeypatch.setattr(cli.asyncio, "run", fake_run)
+
+    rc = cli.main(["seed", "--packs", "maker"])
+    assert rc == 0
+    assert called["ran"] is True
+    assert called["packs"] == "maker"
+
+
+def test_main_returns_1_on_failure(monkeypatch, capsys) -> None:
+    async def boom(packs):
+        raise ValueError("kaboom")
+
+    monkeypatch.setattr(cli, "run_seed", boom)
+    rc = cli.main(["seed", "--packs", "maker"])
+    assert rc == 1
+    assert "kaboom" in capsys.readouterr().err
+
+
+def test_main_bad_args_exits_2() -> None:
+    import pytest as _pytest
+    with _pytest.raises(SystemExit) as exc:
+        cli.main([])  # missing required subcommand → argparse exits 2
+    assert exc.value.code == 2
