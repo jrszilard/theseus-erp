@@ -1,0 +1,31 @@
+# Maker Edition default lookups. Loaded by `theseus seed --packs maker`.
+# Idempotent by unique field (Channel.name / Format.name) — safe to re-run.
+maker.Channel:
+  - name: Etsy
+    fee_percent: 6.5
+    fee_fixed: 0.20
+    is_active: true
+  - name: eBay
+    fee_percent: 13.25
+    fee_fixed: 0.30
+    is_active: true
+  - name: In-person
+    fee_percent: 0
+    fee_fixed: 0
+    is_active: true
+  - name: Own-site
+    fee_percent: 2.9
+    fee_fixed: 0.30
+    is_active: true
+
+maker.Format:
+  - name: Sticker
+    default_unit: each
+  - name: Postcard
+    default_unit: each
+  - name: Print
+    default_unit: each
+  - name: Magnet
+    default_unit: each
+  - name: Original
+    default_unit: each
