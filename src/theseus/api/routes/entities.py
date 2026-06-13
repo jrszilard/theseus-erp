@@ -9,6 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from theseus.api.dependencies import get_blueprint
 from theseus.database import get_session
+from theseus.keel.entities.writer import (
+    extract_columns as _extract_columns,
+    insert_entity,
+    row_to_dict as _row_to_dict,
+)
 from theseus.keel.event_store.middleware import emit_entity_event
 from theseus.keel.event_store.store import PostgresEventStore
 
@@ -19,24 +24,9 @@ router = APIRouter(prefix="/api/v1/entities", tags=["entities"])
 async def create_entity(plank: str, entity: str, body: dict[str, Any],
                         session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
     bp = get_blueprint(plank, entity)
-    entity_id = uuid.uuid4()
-    columns = _extract_columns(bp, body)
-    columns["id"] = entity_id
-    col_names = ", ".join(columns.keys())
-    col_params = ", ".join(f":{k}" for k in columns.keys())
-    query = text(f"INSERT INTO {bp.table_name} ({col_names}) VALUES ({col_params}) RETURNING *")
-    result = await session.execute(query, columns)
-
-    # Auto-emit creation event
-    store = PostgresEventStore(session=session)
-    await emit_entity_event(
-        store=store, action="created", plank=plank, entity=entity,
-        entity_id=entity_id, data=body,
-    )
-
+    row = await insert_entity(session, bp, body)
     await session.commit()
-    row = result.mappings().one()
-    return _row_to_dict(row)
+    return row
 
 
 @router.get("/{plank}/{entity}")
@@ -89,17 +79,3 @@ async def update_entity(plank: str, entity: str, entity_id: uuid.UUID, body: dic
     return _row_to_dict(row)
 
 
-def _extract_columns(bp, body: dict[str, Any]) -> dict[str, Any]:
-    valid_fields = set(bp.fields.keys())
-    computed_fields = {name for name, field in bp.fields.items() if field.computed}
-    return {k: v for k, v in body.items() if k in valid_fields and k not in computed_fields}
-
-
-def _row_to_dict(row: Any) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in row.items():
-        if isinstance(value, uuid.UUID):
-            result[key] = str(value)
-        else:
-            result[key] = value
-    return result
