@@ -3,13 +3,17 @@ from __future__ import annotations
 import csv
 import io
 import zipfile
+from typing import TYPE_CHECKING
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from theseus.keel.assets.factory import build_storage
-from theseus.keel.assets.protocols import StorageBackend
-from theseus.keel.blueprint_engine.registry import BlueprintRegistry
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from theseus.keel.assets.protocols import StorageBackend
+    from theseus.keel.blueprint_engine.registry import BlueprintRegistry
 
 
 async def export_all(
@@ -41,7 +45,7 @@ async def export_all(
         for key in keys:
             try:
                 data = await storage.get(key)
-            except Exception:  # noqa: BLE001 — one missing object must not abort the whole export
+            except Exception:
                 skipped.append(key)
                 continue
             zf.writestr(f"assets/{key}", data)  # NOTE: whole file in memory — fine at maker scale

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-from theseus.config import Settings
+if TYPE_CHECKING:
+    from starlette.requests import Request
+
+    from theseus.config import Settings
 
 logger = logging.getLogger("theseus.security")
 

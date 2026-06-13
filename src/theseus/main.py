@@ -7,15 +7,15 @@ from fastapi import FastAPI
 
 from theseus.api.dependencies import set_registry
 from theseus.api.middleware import RequestLoggingMiddleware
-from theseus.api.security import SameOriginMiddleware, check_production_safety
 from theseus.api.routes import assets, entities, health, maker, shipwright
-from theseus.web import routes as web_routes
-from theseus.web.templating import mount_static
+from theseus.api.security import SameOriginMiddleware, check_production_safety
 from theseus.bootstrap import build_registry, create_all_tables
 from theseus.config import settings
 from theseus.database import async_session_factory, engine
 from theseus.keel.knowledge_graph.graph import PostgresKnowledgeGraph
 from theseus.keel.knowledge_graph.registration import register_blueprints_in_graph
+from theseus.web import routes as web_routes
+from theseus.web.templating import mount_static
 
 logger = logging.getLogger("theseus")
 

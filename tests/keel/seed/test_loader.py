@@ -15,7 +15,8 @@ async def test_seed_pack_inserts_and_is_idempotent(db_session) -> None:
     await db_session.execute(text(
         "DELETE FROM maker_channel WHERE name IN ('Etsy','eBay','In-person','Own-site')"))
     await db_session.execute(text(
-        "DELETE FROM maker_format WHERE name IN ('Sticker','Postcard','Print','Magnet','Original')"))
+        "DELETE FROM maker_format WHERE name IN "
+        "('Sticker','Postcard','Print','Magnet','Original')"))
     await db_session.flush()
 
     first = await seed_pack(db_session, registry, "maker")

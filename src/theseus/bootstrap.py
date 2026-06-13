@@ -2,15 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+# Import Keel ORM models so their tables are present in Base.metadata for create_all.
+import theseus.keel.assets.models
+import theseus.keel.event_store.models  # noqa: F401
 from theseus.database import Base, engine
 from theseus.keel.blueprint_engine.discovery import discover_blueprint_files
 from theseus.keel.blueprint_engine.parser import BlueprintFileParser
 from theseus.keel.blueprint_engine.registry import BlueprintRegistry
 from theseus.keel.schema_engine.generator import SchemaGenerator
-
-# Import Keel ORM models so their tables are present in Base.metadata for create_all.
-import theseus.keel.assets.models  # noqa: F401
-import theseus.keel.event_store.models  # noqa: F401
 
 BLUEPRINTS_DIR = Path("blueprints")
 PLANKS_DIR = Path("planks")

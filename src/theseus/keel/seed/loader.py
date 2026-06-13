@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from theseus.keel.blueprint_engine.registry import BlueprintRegistry
 from theseus.keel.entities.writer import find_existing_by_unique, insert_entity
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from theseus.keel.blueprint_engine.registry import BlueprintRegistry
 
 PLANKS_DIR = Path("planks")
 

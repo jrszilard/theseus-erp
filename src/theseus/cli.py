@@ -48,7 +48,7 @@ def main(argv: list[str] | None = None) -> int:
             asyncio.run(run_seed(args.packs))
         elif args.command == "export":
             asyncio.run(run_export(args.out))
-    except Exception as exc:  # noqa: BLE001 — top-level CLI boundary: report and exit non-zero
+    except Exception as exc:
         print(f"[theseus] {args.command} failed: {exc}", file=sys.stderr)
         return 1
     return 0

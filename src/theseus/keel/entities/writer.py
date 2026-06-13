@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from theseus.keel.blueprint_engine.models import Blueprint
 from theseus.keel.event_store.middleware import emit_entity_event
 from theseus.keel.event_store.store import PostgresEventStore
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from theseus.keel.blueprint_engine.models import Blueprint
 
 
 def extract_columns(bp: Blueprint, body: dict[str, Any]) -> dict[str, Any]:

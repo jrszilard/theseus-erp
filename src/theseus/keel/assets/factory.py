@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from theseus.config import settings
-from theseus.keel.assets.protocols import StorageBackend
 from theseus.keel.assets.storage import LocalStorageBackend, MinioStorageBackend
+
+if TYPE_CHECKING:
+    from theseus.keel.assets.protocols import StorageBackend
 
 
 def build_storage() -> StorageBackend:
