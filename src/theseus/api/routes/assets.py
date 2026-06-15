@@ -5,10 +5,9 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 
-from theseus.config import settings
 from theseus.database import get_session
+from theseus.keel.assets.factory import build_storage
 from theseus.keel.assets.service import AssetService
-from theseus.keel.assets.storage import LocalStorageBackend, MinioStorageBackend
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,15 +19,7 @@ router = APIRouter(prefix="/api/v1/assets", tags=["assets"])
 
 def _get_storage() -> StorageBackend:
     """Module-level factory (mockable in tests; mirrors shipwright._get_gateway)."""
-    if settings.storage_backend == "local":
-        return LocalStorageBackend(root=settings.storage_local_root)
-    return MinioStorageBackend(
-        endpoint=settings.storage_endpoint,
-        access_key=settings.storage_access_key,
-        secret_key=settings.storage_secret_key,
-        bucket=settings.storage_bucket,
-        region=settings.storage_region,
-    )
+    return build_storage()
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
