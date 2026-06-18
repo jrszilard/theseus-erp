@@ -33,6 +33,8 @@ class UIHints(BaseModel):
     colors: dict[str, str] | None = None
     max_height: str | None = None
     highlight_when: str | None = None
+    label: str | None = None
+    icon: str | None = None
 
 
 class BlueprintField(BaseModel):
