@@ -85,3 +85,48 @@ async def test_add_version_unknown_asset_returns_404(client) -> None:
         data={"note": ""},
     )
     assert resp.status_code == 404
+
+
+async def _upload(client, filename, data, content_type, kind="art"):
+    resp = await client.post(
+        "/api/v1/assets",
+        files={"file": (filename, data, content_type)},
+        data={"kind": kind},
+    )
+    assert resp.status_code == 201
+    return resp.json()
+
+
+@pytest.mark.asyncio
+async def test_serve_raw_raster_is_inline_with_trusted_headers(client) -> None:
+    body = await _upload(client, "art.png", b"\x89PNG\r\n\x1a\n", "image/png")
+    key = body["versions"][0]["storage_key"]
+    resp = await client.get(f"/api/v1/assets/raw/{key}")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("image/png")
+    assert resp.headers["content-disposition"] == "inline"
+    assert resp.headers["x-content-type-options"] == "nosniff"
+    assert resp.content == b"\x89PNG\r\n\x1a\n"
+
+
+@pytest.mark.asyncio
+async def test_serve_raw_svg_is_attachment(client) -> None:
+    body = await _upload(client, "loon.svg", b"<svg/>", "image/svg+xml", kind="cut-file")
+    key = body["versions"][0]["storage_key"]
+    resp = await client.get(f"/api/v1/assets/raw/{key}")
+    assert resp.status_code == 200
+    assert resp.headers["content-disposition"] == 'attachment; filename="loon.svg"'
+    assert resp.headers["x-content-type-options"] == "nosniff"
+
+
+@pytest.mark.asyncio
+async def test_serve_raw_unknown_key_404(client) -> None:
+    resp = await client.get("/api/v1/assets/raw/does/not/exist.png")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_serve_raw_traversal_key_404(client) -> None:
+    # No AssetVersion row matches a traversal key → 404 before storage is touched.
+    resp = await client.get("/api/v1/assets/raw/../../etc/passwd")
+    assert resp.status_code == 404

@@ -3,11 +3,14 @@ from __future__ import annotations
 import uuid  # noqa: TC003
 from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from botocore.exceptions import ClientError  # type: ignore[import-untyped]
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
+from sqlalchemy import text
 
 from theseus.database import get_session
 from theseus.keel.assets.factory import build_storage
 from theseus.keel.assets.service import AssetService
+from theseus.keel.assets.serving import disposition_for
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -87,3 +90,40 @@ async def get_asset_url(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     return {"url": url}
+
+
+@router.get("/raw/{key:path}")
+async def serve_asset_raw(
+    key: str,
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> Response:
+    """Stream asset bytes. Content-Type/filename/disposition come from the trusted
+    Asset record (never the URL); X-Content-Type-Options: nosniff is always set."""
+    row = (
+        await session.execute(
+            text(
+                "SELECT a.filename, a.content_type "
+                "FROM asset_versions av JOIN assets a ON a.id = av.asset_id "
+                "WHERE av.storage_key = :key"
+            ),
+            {"key": key},
+        )
+    ).mappings().one_or_none()
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="asset not found")
+
+    try:
+        data = await _get_storage().get(key)
+    except (FileNotFoundError, ValueError, ClientError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="asset bytes missing"
+        ) from exc
+
+    return Response(
+        content=data,
+        media_type=row["content_type"],
+        headers={
+            "Content-Disposition": disposition_for(row["content_type"], row["filename"]),
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
