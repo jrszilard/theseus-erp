@@ -117,6 +117,7 @@ async def test_serve_raw_svg_is_attachment(client) -> None:
     assert resp.status_code == 200
     assert resp.headers["content-disposition"] == 'attachment; filename="loon.svg"'
     assert resp.headers["x-content-type-options"] == "nosniff"
+    assert resp.headers["content-type"].startswith("image/svg+xml")
 
 
 @pytest.mark.asyncio

@@ -120,6 +120,7 @@ async def test_design_detail_renders_design_and_version_file_strips(
     assert f'/api/v1/assets/raw/{art.versions[0].storage_key}' in body
     # non-previewable svg chip carries a download hint; previewable png does not
     assert "download" in body
+    assert body.count(" download") == 1
 
 
 def test_file_strip_macro_is_field_agnostic():
