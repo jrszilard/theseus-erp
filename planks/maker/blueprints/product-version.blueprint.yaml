@@ -16,9 +16,15 @@ fields:
   production_files:
     type: file
     multiple: true
+    ui:
+      label: Production files
+      icon: "🛠"
   mockups:
     type: file
     multiple: true
+    ui:
+      label: Mockups
+      icon: "📷"
 
 relations:
   product:

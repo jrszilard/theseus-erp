@@ -164,3 +164,23 @@ async def test_get_design_detail_attaches_file_groups(db_session, maker_seed, tm
         for p in detail["products"] for v in p["versions"]
         if v["id"] != maker_seed["version_id"]
     )
+
+
+@pytest.mark.asyncio
+async def test_maker_pack_ui_hints_drive_group_labels_and_icons(db_session, maker_seed, tmp_path):
+    from theseus.web import read_models
+
+    svc = AssetService(session=db_session, storage=LocalStorageBackend(root=str(tmp_path)))
+    art = await svc.upload(filename="loon.png", content_type="image/png",
+                           data=b"\x89PNG", kind="art")
+    await db_session.execute(
+        text("INSERT INTO maker_design_source_art (id, maker_design_id, asset_id, sort_order) "
+             "VALUES (:j, :e, :a, 0)"),
+        {"j": str(uuid.uuid4()), "e": maker_seed["design_id"], "a": str(art.id)},
+    )
+    await db_session.flush()
+
+    detail = await read_models.get_design_detail(db_session, uuid.UUID(maker_seed["design_id"]))
+    source_art = next(g for g in detail["file_groups"] if g["field_name"] == "source_art")
+    assert source_art["label"] == "Source art"
+    assert source_art["group_icon"] == "🎨"
