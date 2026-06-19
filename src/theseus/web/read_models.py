@@ -5,11 +5,101 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import text
 
+from theseus.bootstrap import build_registry
+from theseus.keel.assets.serving import is_previewable
+from theseus.keel.blueprint_engine.models import FieldType
 from theseus.planks.maker.insights import MakerInsights
 from theseus.planks.maker.service import MakerService
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+
+def icon_for(content_type: str) -> str:
+    """Generic, content-type-derived per-file icon. Maker-specific semantics live in
+    the field's ui.icon (the group icon), not here."""
+    ct = (content_type or "").split(";")[0].strip().lower()
+    if ct == "application/pdf":
+        return "📄"
+    if ct == "image/svg+xml":
+        return "📐"
+    if ct.startswith("image/"):
+        return "🖼"
+    if ct.startswith("model/") or ct.endswith("3mf"):
+        return "📦"
+    if ct.startswith("text/"):
+        return "📝"
+    return "📎"
+
+
+async def _resolve_field_assets(
+    session: AsyncSession, table_name: str, field_name: str,
+    multiple: bool, entity_id: Any,
+) -> list[dict[str, Any]]:
+    # Identifiers are Blueprint-derived (trusted), so f-string interpolation is safe;
+    # the entity id is always a bound parameter. Picks the current (max-version) row.
+    if multiple:
+        junction = f"{table_name}_{field_name}"
+        fk_col = f"{table_name}_id"
+        rows = (await session.execute(text(
+            f"SELECT a.filename, a.content_type, av.storage_key "
+            f"FROM {junction} j "
+            f"JOIN assets a ON a.id = j.asset_id "
+            f"JOIN asset_versions av ON av.asset_id = a.id "
+            f"AND av.version = (SELECT MAX(v2.version) FROM asset_versions v2 "
+            f"                  WHERE v2.asset_id = a.id) "
+            f"WHERE j.{fk_col} = :eid ORDER BY j.sort_order ASC"
+        ), {"eid": str(entity_id)})).mappings().all()
+    else:
+        col = f"{field_name}_asset_id"
+        rows = (await session.execute(text(
+            f"SELECT a.filename, a.content_type, av.storage_key "
+            f"FROM {table_name} e "
+            f"JOIN assets a ON a.id = e.{col} "
+            f"JOIN asset_versions av ON av.asset_id = a.id "
+            f"AND av.version = (SELECT MAX(v2.version) FROM asset_versions v2 "
+            f"                  WHERE v2.asset_id = a.id) "
+            f"WHERE e.id = :eid"
+        ), {"eid": str(entity_id)})).mappings().all()
+    return [
+        {
+            "url": f"/api/v1/assets/raw/{r['storage_key']}",
+            "filename": r["filename"],
+            "content_type": r["content_type"],
+            "icon": icon_for(r["content_type"]),
+            "previewable": is_previewable(r["content_type"]),
+        }
+        for r in rows
+    ]
+
+
+async def file_groups_for_entity(
+    session: AsyncSession, registry: Any, full_name: str, entity_id: Any,
+) -> list[dict[str, Any]]:
+    """Introspect an entity's Blueprint for `file` fields and resolve their assets.
+    Field-name-agnostic: works for any maker's Blueprint. Empty fields are omitted."""
+    bp = registry.get(full_name)
+    if bp is None:
+        return []
+    groups: list[dict[str, Any]] = []
+    for field_name, field in bp.fields.items():
+        if field.type != FieldType.FILE:
+            continue
+        files = await _resolve_field_assets(
+            session, bp.table_name, field_name, field.multiple, entity_id
+        )
+        if not files:
+            continue
+        label = (
+            field.ui.label if field.ui and field.ui.label
+            else field_name.replace("_", " ").title()
+        )
+        group_icon = field.ui.icon if field.ui and field.ui.icon else None
+        groups.append({
+            "field_name": field_name, "label": label,
+            "group_icon": group_icon, "files": files,
+        })
+    return groups
 
 
 async def list_designs_for_board(session: AsyncSession) -> list[dict[str, Any]]:
@@ -45,6 +135,7 @@ async def get_design_detail(session: AsyncSession, design_id: uuid.UUID) -> dict
     if design is None:
         return None
 
+    registry = build_registry()
     svc = MakerService(session=session)
     products = (await session.execute(text(
         "SELECT p.id AS product_id, p.name AS product_name, f.name AS format_name "
@@ -80,8 +171,13 @@ async def get_design_detail(session: AsyncSession, design_id: uuid.UUID) -> dict
                     "profit": profit, "margin": margin,
                     "sold": float(sold or 0), "on_hand": on_hand,
                 })
-            version_views.append({"id": str(ver["id"]), "number": ver["number"],
-                                  "status": ver["status"], "variations": var_views})
+            version_views.append({
+                "id": str(ver["id"]), "number": ver["number"], "status": ver["status"],
+                "variations": var_views,
+                "file_groups": await file_groups_for_entity(
+                    session, registry, "maker.ProductVersion", ver["id"]
+                ),
+            })
         product_views.append({"id": str(p["product_id"]), "name": p["product_name"],
                               "format": p["format_name"], "versions": version_views})
 
@@ -110,6 +206,9 @@ async def get_design_detail(session: AsyncSession, design_id: uuid.UUID) -> dict
         "make_more": make_more,
         "promote": promote,
         "version_compare": version_rows,
+        "file_groups": await file_groups_for_entity(
+            session, registry, "maker.Design", design["id"]
+        ),
     }
 
 

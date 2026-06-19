@@ -19,9 +19,15 @@ fields:
   source_art:
     type: file
     multiple: true
+    ui:
+      label: Source art
+      icon: "🎨"
   writing:
     type: file
     multiple: true
+    ui:
+      label: Writing
+      icon: "✍️"
 
 relations:
   products:

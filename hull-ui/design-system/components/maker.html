@@ -64,3 +64,19 @@
 {% macro shipwright_bubble(text, kind='info') -%}
 <div class="sw-bubble sw-{{ kind }}">{{ text }}</div>
 {%- endmacro %}
+
+{% macro file_strip(label, groups) -%}
+{% if groups %}
+<section class="file-strip">
+  <h3 class="file-strip-label">{{ label }}</h3>
+  {% for group in groups %}
+  <div class="file-group">
+    <span class="file-group-label">{% if group.group_icon %}{{ group.group_icon }} {% endif %}{{ group.label }}</span>
+    {% for f in group.files %}
+    <a class="file-chip" href="{{ f.url }}"{% if not f.previewable %} download{% endif %}>{{ f.icon }} {{ f.filename }}</a>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+{%- endmacro %}
