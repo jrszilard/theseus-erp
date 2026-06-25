@@ -308,13 +308,13 @@ async def upload_entity_file(
     registry = build_registry()
     svc = AssetService(session=session, storage=_get_storage())
     cap = settings.max_upload_bytes
-    error: str | None = None
+    errors: list[str] = []
     for f in (files or []):
         data = await f.read()
         if not data:
             continue
         if len(data) > cap:
-            error = f"{f.filename or 'file'} is too large (max {cap // (1024 * 1024)} MB)"
+            errors.append(f"{f.filename or 'file'} is too large (max {cap // (1024 * 1024)} MB)")
             continue
         rec = await svc.upload(
             filename=f.filename or "upload.bin",
@@ -323,6 +323,7 @@ async def upload_entity_file(
         )
         await attach_asset(session, registry, ref, entity_id, field_name, rec.id)
     await session.commit()
+    error = "; ".join(errors) if errors else None
     return await _file_group_response(request, session, ref, entity_id, field_name, error)
 
 
