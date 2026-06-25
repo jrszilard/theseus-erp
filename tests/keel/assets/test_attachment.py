@@ -129,6 +129,8 @@ async def test_non_file_field_raises_and_writes_nothing(attach_setup, db_session
         resolve_file_field(attach_setup.get("exp.Attdoc"), "title")   # STRING, not FILE
     with pytest.raises(FileFieldError):
         await attach_asset(db_session, attach_setup, "exp.Attdoc", eid, "nope", a1.id)
+    with pytest.raises(FileFieldError):
+        await detach_asset(db_session, attach_setup, "exp.Attdoc", eid, "nope", a1.id)
     count = (await db_session.execute(text(
         "SELECT COUNT(*) FROM exp_attdoc_attachments WHERE exp_attdoc_id = :e"),
         {"e": str(eid)})).scalar()

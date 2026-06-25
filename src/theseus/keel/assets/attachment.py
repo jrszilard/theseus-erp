@@ -65,6 +65,10 @@ async def attach_asset(
         )).scalar()
         if existing is not None:
             return
+        # Read-compute-write race on sort_order is deliberately accepted: this is a
+        # single-user, human-paced maker app and sort_order uniqueness is not relied
+        # upon — the read side only ORDER BY sort_order, so ties are harmless. No
+        # advisory lock or sequence needed.
         next_order = (await session.execute(
             text(f"SELECT COALESCE(MAX(sort_order), -1) + 1 FROM {target.junction_table} "
                  f"WHERE {target.entity_fk} = :e"),
