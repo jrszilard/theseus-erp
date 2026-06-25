@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     debug: bool = False
     enforce_production: bool = False
+    # Uploads (browser-facing). The Caddy request-body cap is the hard backstop.
+    max_upload_bytes: int = 25 * 1024 * 1024
 
     # Object storage (DAM)
     storage_backend: str = "minio"  # "minio" | "s3" | "local"

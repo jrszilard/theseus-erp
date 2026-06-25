@@ -184,3 +184,61 @@ async def test_maker_pack_ui_hints_drive_group_labels_and_icons(db_session, make
     source_art = next(g for g in detail["file_groups"] if g["field_name"] == "source_art")
     assert source_art["label"] == "Source art"
     assert source_art["group_icon"] == "🎨"
+
+
+@pytest.mark.asyncio
+async def test_file_dicts_include_asset_id(test_engine, db_session, tmp_path):
+    bp = Blueprint(
+        plank="exp", entity="Doc3", version=1, description="custom",
+        fields={
+            "title": BlueprintField(type=FieldType.STRING, required=True),
+            "attachments": BlueprintField(type=FieldType.FILE, multiple=True),
+        },
+    )
+    registry = BlueprintRegistry()
+    registry.register(bp)
+    SchemaGenerator(metadata=Base.metadata).generate_table(bp)
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all, checkfirst=True)
+    svc = AssetService(session=db_session, storage=LocalStorageBackend(root=str(tmp_path)))
+    rec = await svc.upload(filename="a.png", content_type="image/png", data=b"\x89PNG", kind="x")
+    eid = uuid.uuid4()
+    await db_session.execute(
+        text("INSERT INTO exp_doc3 (id, title) VALUES (:i, 't')"), {"i": str(eid)})
+    await db_session.execute(text(
+        "INSERT INTO exp_doc3_attachments (id, exp_doc3_id, asset_id, sort_order) "
+        "VALUES (:j, :e, :a, 0)"), {"j": str(uuid.uuid4()), "e": str(eid), "a": str(rec.id)})
+    await db_session.flush()
+    groups = await file_groups_for_entity(db_session, registry, "exp.Doc3", eid)
+    assert groups[0]["files"][0]["asset_id"] == str(rec.id)
+
+
+@pytest.mark.asyncio
+async def test_include_empty_keeps_fileless_groups(test_engine, db_session):
+    bp = Blueprint(
+        plank="exp", entity="Doc4", version=1, description="custom",
+        fields={
+            "title": BlueprintField(type=FieldType.STRING, required=True),
+            "attachments": BlueprintField(
+                type=FieldType.FILE, multiple=True, ui=UIHints(label="Files", icon="📎")),
+        },
+    )
+    registry = BlueprintRegistry()
+    registry.register(bp)
+    SchemaGenerator(metadata=Base.metadata).generate_table(bp)
+    async with test_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all, checkfirst=True)
+    eid = uuid.uuid4()
+    await db_session.execute(
+        text("INSERT INTO exp_doc4 (id, title) VALUES (:i, 't')"), {"i": str(eid)})
+    await db_session.flush()
+    # default: an empty field is omitted (unchanged behavior)
+    assert await file_groups_for_entity(db_session, registry, "exp.Doc4", eid) == []
+    # include_empty: the group is present, files empty, label/icon resolved
+    groups = await file_groups_for_entity(
+        db_session, registry, "exp.Doc4", eid, include_empty=True)
+    assert len(groups) == 1
+    assert groups[0]["field_name"] == "attachments"
+    assert groups[0]["files"] == []
+    assert groups[0]["label"] == "Files"
+    assert groups[0]["group_icon"] == "📎"

@@ -65,17 +65,33 @@
 <div class="sw-bubble sw-{{ kind }}">{{ text }}</div>
 {%- endmacro %}
 
-{% macro file_strip(label, groups) -%}
+{% macro file_group(group, ref, entity_id, error=None) -%}
+{% set gid = 'file-group-' ~ ref|replace('.', '-') ~ '-' ~ entity_id ~ '-' ~ group.field_name %}
+<div class="file-group" id="{{ gid }}">
+  <span class="file-group-label">{% if group.group_icon %}{{ group.group_icon }} {% endif %}{{ group.label }}</span>
+  {% for f in group.files %}
+  <span class="file-chip-wrap">
+    <a class="file-chip" href="{{ f.url }}"{% if not f.previewable %} download{% endif %}>{{ f.icon }} {{ f.filename }}</a>
+    <button class="file-detach" type="button" aria-label="Remove {{ f.filename }}"
+            hx-post="/entities/{{ ref }}/{{ entity_id }}/files/{{ group.field_name }}/detach/{{ f.asset_id }}"
+            hx-target="#{{ gid }}" hx-swap="outerHTML">×</button>
+  </span>
+  {% endfor %}
+  <form class="file-upload" hx-post="/entities/{{ ref }}/{{ entity_id }}/files/{{ group.field_name }}"
+        hx-encoding="multipart/form-data" hx-target="#{{ gid }}" hx-swap="outerHTML">
+    <input class="file-input" type="file" name="files" multiple required>
+    <button class="file-add" type="submit">+ Add</button>
+  </form>
+  {% if error %}<span class="file-error">{{ error }}</span>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro file_strip(label, groups, ref, entity_id) -%}
 {% if groups %}
 <section class="file-strip">
   <h3 class="file-strip-label">{{ label }}</h3>
   {% for group in groups %}
-  <div class="file-group">
-    <span class="file-group-label">{% if group.group_icon %}{{ group.group_icon }} {% endif %}{{ group.label }}</span>
-    {% for f in group.files %}
-    <a class="file-chip" href="{{ f.url }}"{% if not f.previewable %} download{% endif %}>{{ f.icon }} {{ f.filename }}</a>
-    {% endfor %}
-  </div>
+  {{ file_group(group, ref, entity_id) }}
   {% endfor %}
 </section>
 {% endif %}
