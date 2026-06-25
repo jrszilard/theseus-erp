@@ -5,12 +5,21 @@ import re
 import uuid
 from typing import TYPE_CHECKING, NamedTuple
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import text
 
 from theseus.bootstrap import build_registry
+from theseus.config import settings
 from theseus.database import get_session
+from theseus.keel.assets.attachment import (
+    FileFieldError,
+    attach_asset,
+    detach_asset,
+    resolve_file_field,
+)
+from theseus.keel.assets.factory import build_storage
+from theseus.keel.assets.service import AssetService
 from theseus.keel.entities.writer import insert_entity
 from theseus.keel.llm_gateway.gateway import LLMGateway
 from theseus.planks.maker.capture import llm_available, parse_sale_text
@@ -21,6 +30,8 @@ from theseus.web.templating import templates
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from theseus.keel.assets.protocols import StorageBackend
 
 class _TallyLine(NamedTuple):
     variation_id: uuid.UUID
@@ -251,3 +262,79 @@ async def capture_commit(request: Request, market_event_id: uuid.UUID,
     await session.commit()
     view = await read_models.get_market_day(session, market_event_id)
     return templates.TemplateResponse(request, "partials/_market_lines.html", {"market": view})
+
+
+def _get_storage() -> StorageBackend:
+    """Module-level factory (mockable in tests; mirrors the assets API route)."""
+    return build_storage()
+
+
+def _validate_file_field(ref: str, field_name: str) -> None:
+    """404 before any work if ref isn't a known Blueprint or field_name isn't one of
+    its declared `file` fields. This is the SQL-identifier whitelist gate."""
+    bp = build_registry().get(ref)
+    if bp is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="entity type not found")
+    try:
+        resolve_file_field(bp, field_name)
+    except FileFieldError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="file field not found"
+        ) from exc
+
+
+async def _file_group_response(
+    request: Request, session: AsyncSession, ref: str, entity_id: uuid.UUID,
+    field_name: str, error: str | None = None,
+) -> HTMLResponse:
+    registry = build_registry()
+    groups = await read_models.file_groups_for_entity(
+        session, registry, ref, entity_id, include_empty=True
+    )
+    group = next((g for g in groups if g["field_name"] == field_name), None)
+    return templates.TemplateResponse(
+        request, "partials/_file_group.html",
+        {"group": group, "ref": ref, "entity_id": str(entity_id), "error": error},
+    )
+
+
+@router.post("/entities/{ref}/{entity_id}/files/{field_name}", response_class=HTMLResponse)
+async def upload_entity_file(
+    request: Request, ref: str, entity_id: uuid.UUID, field_name: str,
+    files: list[UploadFile] | None = File(None),  # noqa: B008
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> HTMLResponse:
+    _validate_file_field(ref, field_name)
+    registry = build_registry()
+    svc = AssetService(session=session, storage=_get_storage())
+    cap = settings.max_upload_bytes
+    error: str | None = None
+    for f in (files or []):
+        data = await f.read()
+        if not data:
+            continue
+        if len(data) > cap:
+            error = f"{f.filename or 'file'} is too large (max {cap // (1024 * 1024)} MB)"
+            continue
+        rec = await svc.upload(
+            filename=f.filename or "upload.bin",
+            content_type=f.content_type or "application/octet-stream",
+            data=data, kind=field_name,
+        )
+        await attach_asset(session, registry, ref, entity_id, field_name, rec.id)
+    await session.commit()
+    return await _file_group_response(request, session, ref, entity_id, field_name, error)
+
+
+@router.post(
+    "/entities/{ref}/{entity_id}/files/{field_name}/detach/{asset_id}",
+    response_class=HTMLResponse,
+)
+async def detach_entity_file(
+    request: Request, ref: str, entity_id: uuid.UUID, field_name: str, asset_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),  # noqa: B008
+) -> HTMLResponse:
+    _validate_file_field(ref, field_name)
+    await detach_asset(session, build_registry(), ref, entity_id, field_name, asset_id)
+    await session.commit()
+    return await _file_group_response(request, session, ref, entity_id, field_name)
