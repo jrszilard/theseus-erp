@@ -5,7 +5,7 @@
 {% block content %}
 <nav class="crumbs"><a href="/">Ideas</a> › <span>{{ design.title }}</span></nav>
 <h1>{{ design.title }} {{ ui.badge(design.status) }}</h1>
-{{ mk.file_strip('Design files', design.file_groups) }}
+{{ mk.file_strip('Design files', design.file_groups, 'maker.Design', design.id) }}
 
 {% for product in design.products %}
 <details class="format-block" {% if design.products|length == 1 %}open{% endif %}>
@@ -19,7 +19,7 @@
         {% for v in version.variations %}{{ mk.variation_row(v) }}{% endfor %}
       </tbody>
     </table>
-    {{ mk.file_strip('Files · v' ~ version.number, version.file_groups) }}
+    {{ mk.file_strip('Files · v' ~ version.number, version.file_groups, 'maker.ProductVersion', version.id) }}
   </div>
   {% endfor %}
 </details>
