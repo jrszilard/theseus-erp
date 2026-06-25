@@ -14,6 +14,7 @@ from theseus.config import settings
 from theseus.database import get_session
 from theseus.keel.assets.attachment import (
     FileFieldError,
+    FileFieldTarget,
     attach_asset,
     detach_asset,
     resolve_file_field,
@@ -269,18 +270,29 @@ def _get_storage() -> StorageBackend:
     return build_storage()
 
 
-def _validate_file_field(ref: str, field_name: str) -> None:
+def _validate_file_field(ref: str, field_name: str) -> FileFieldTarget:
     """404 before any work if ref isn't a known Blueprint or field_name isn't one of
-    its declared `file` fields. This is the SQL-identifier whitelist gate."""
+    its declared `file` fields. Returns the resolved target for the entity probe.
+    This is the SQL-identifier whitelist gate."""
     bp = build_registry().get(ref)
     if bp is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="entity type not found")
     try:
-        resolve_file_field(bp, field_name)
+        return resolve_file_field(bp, field_name)
     except FileFieldError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="file field not found"
         ) from exc
+
+
+async def _require_entity(session: AsyncSession, target: FileFieldTarget,
+                          entity_id: uuid.UUID) -> None:
+    """404 if the entity row is gone (e.g. deleted in another tab) — turns a downstream
+    FK-violation 500 into a clean 404. `target.table_name` is Blueprint-derived."""
+    if (await session.execute(
+        text(f"SELECT 1 FROM {target.table_name} WHERE id = :e"), {"e": str(entity_id)}
+    )).scalar() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="entity not found")
 
 
 async def _file_group_response(
@@ -304,7 +316,8 @@ async def upload_entity_file(
     files: list[UploadFile] | None = File(None),  # noqa: B008
     session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> HTMLResponse:
-    _validate_file_field(ref, field_name)
+    target = _validate_file_field(ref, field_name)
+    await _require_entity(session, target, entity_id)
     registry = build_registry()
     svc = AssetService(session=session, storage=_get_storage())
     cap = settings.max_upload_bytes
@@ -335,7 +348,8 @@ async def detach_entity_file(
     request: Request, ref: str, entity_id: uuid.UUID, field_name: str, asset_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> HTMLResponse:
-    _validate_file_field(ref, field_name)
+    target = _validate_file_field(ref, field_name)
+    await _require_entity(session, target, entity_id)
     await detach_asset(session, build_registry(), ref, entity_id, field_name, asset_id)
     await session.commit()
     return await _file_group_response(request, session, ref, entity_id, field_name)

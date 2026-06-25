@@ -105,3 +105,12 @@ async def test_detach_removes_chip_keeps_asset(client, db_session, maker_seed):
     still = (await db_session.execute(text(
         "SELECT 1 FROM assets WHERE id = :a"), {"a": str(asset_id)})).scalar()
     assert still == 1   # detach-only
+
+
+@pytest.mark.asyncio
+async def test_unknown_entity_is_404(client, maker_seed):
+    resp = await client.post(
+        f"/entities/maker.Design/{uuid.uuid4()}/files/source_art",
+        files={"files": ("x.png", b"\x89PNG", "image/png")},
+    )
+    assert resp.status_code == 404
