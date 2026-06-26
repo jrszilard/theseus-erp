@@ -13,9 +13,6 @@ async def test_run_seed_orchestrates_packs_and_commits_once(monkeypatch) -> None
         seeded.append(pack)
         return {f"{pack}.Thing": {"created": 1, "skipped": 0}}
 
-    async def fake_create_all(registry):
-        return None
-
     class _Session:
         async def commit(self):
             committed["count"] += 1
@@ -27,7 +24,6 @@ async def test_run_seed_orchestrates_packs_and_commits_once(monkeypatch) -> None
             return False
 
     monkeypatch.setattr(cli, "seed_pack", fake_seed_pack)
-    monkeypatch.setattr(cli, "create_all_tables", fake_create_all)
     monkeypatch.setattr(cli, "async_session_factory", lambda: _Ctx())
 
     summary = await cli.run_seed("maker, foo")
@@ -48,9 +44,6 @@ async def test_run_seed_ignores_blank_pack_tokens(monkeypatch) -> None:
         seeded.append(pack)
         return {}
 
-    async def fake_create_all(registry):
-        return None
-
     class _Ctx:
         async def __aenter__(self):
             class _S:
@@ -61,7 +54,6 @@ async def test_run_seed_ignores_blank_pack_tokens(monkeypatch) -> None:
             return False
 
     monkeypatch.setattr(cli, "seed_pack", fake_seed_pack)
-    monkeypatch.setattr(cli, "create_all_tables", fake_create_all)
     monkeypatch.setattr(cli, "async_session_factory", lambda: _Ctx())
 
     await cli.run_seed("maker, , ,")

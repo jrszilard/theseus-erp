@@ -9,7 +9,7 @@ from theseus.api.dependencies import set_registry
 from theseus.api.middleware import RequestLoggingMiddleware
 from theseus.api.routes import assets, entities, health, maker, shipwright
 from theseus.api.security import SameOriginMiddleware, check_production_safety
-from theseus.bootstrap import build_registry, create_all_tables
+from theseus.bootstrap import build_registry
 from theseus.config import settings
 from theseus.database import async_session_factory, engine
 from theseus.keel.knowledge_graph.graph import PostgresKnowledgeGraph
@@ -28,8 +28,6 @@ async def lifespan(app: FastAPI):
     for bp in registry.all():
         logger.info("Registered Blueprint: %s", bp.full_name)
     set_registry(registry)
-
-    await create_all_tables(registry)
 
     async with async_session_factory() as session:
         graph = PostgresKnowledgeGraph(session=session)
