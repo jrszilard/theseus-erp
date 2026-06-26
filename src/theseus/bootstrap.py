@@ -33,9 +33,9 @@ def register_blueprint_tables(
     registry: BlueprintRegistry, metadata: MetaData | None = None
 ) -> MetaData:
     """Generate every Blueprint's SQLAlchemy table onto `metadata` (default
-    Base.metadata). Shared by alembic/env.py so the running app and the migration
-    environment see an identical schema. Idempotent: skips blueprints whose table
-    is already registered (guards against double-call within the same process)."""
+    Base.metadata). Called by alembic/env.py and test fixtures so the migration
+    environment and tests see an identical schema. Idempotent: skips blueprints
+    whose table is already registered (guards against double-call within the same process)."""
     target = Base.metadata if metadata is None else metadata
     generator = SchemaGenerator(metadata=target)
     for bp in registry.all():
