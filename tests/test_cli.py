@@ -47,7 +47,7 @@ async def test_run_seed_ignores_blank_pack_tokens(monkeypatch) -> None:
     class _Ctx:
         async def __aenter__(self):
             class _S:
-                async def commit(self_inner):
+                async def commit(self):
                     return None
             return _S()
         async def __aexit__(self, *a):
