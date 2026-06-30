@@ -16,6 +16,19 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
+# Sellable products = variations whose ProductVersion is 'current'. on_hand = summed
+# inventory movements for the variation's finished StockItem; name = the design title.
+_SELLABLE_BASE = (
+    "SELECT v.sku, v.base_price, d.title AS name, "
+    "COALESCE((SELECT SUM(m.quantity) FROM inventory_stock_movement m "
+    "          WHERE m.stock_item_id = v.finished_stock_id), 0) AS on_hand "
+    "FROM maker_variation v "
+    "JOIN maker_product_version pv ON pv.id = v.product_version_id AND pv.status = 'current' "
+    "JOIN maker_product p ON p.id = pv.product_id "
+    "JOIN maker_design d ON d.id = p.design_id "
+)
+
+
 class MakerService:
     """Domain service for the Maker Plank: entity create-helpers + costing + production.
 
@@ -182,6 +195,31 @@ class MakerService:
         if total_qty == 0:
             return 0.0
         return float(total_cost / total_qty)
+
+    # ---- integration read surface ----
+
+    @staticmethod
+    def _product_dict(row: Any) -> dict[str, Any]:
+        on_hand = float(row["on_hand"] or 0)
+        return {
+            "sku": row["sku"],
+            "name": row["name"],
+            "price": float(row["base_price"] or 0),
+            "on_hand": on_hand,
+            "available": on_hand > 0,
+        }
+
+    async def sellable_products(self) -> list[dict[str, Any]]:
+        rows = (await self._session.execute(
+            text(_SELLABLE_BASE + "ORDER BY v.sku")
+        )).mappings().all()
+        return [self._product_dict(r) for r in rows]
+
+    async def sellable_product(self, sku: str) -> dict[str, Any] | None:
+        row = (await self._session.execute(
+            text(_SELLABLE_BASE + "WHERE v.sku = :sku"), {"sku": sku}
+        )).mappings().one_or_none()
+        return self._product_dict(row) if row is not None else None
 
     # ---- internal helpers ----
 
