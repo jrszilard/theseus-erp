@@ -22,8 +22,9 @@ def test_placeholder_token_refuses_boot():
 
 def test_short_token_refuses_boot():
     s = Settings(**_VALID, integration_api_token="short")
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError) as exc:
         check_production_safety(s)
+    assert "integration_api_token" in str(exc.value)
 
 
 def test_unset_token_is_allowed():

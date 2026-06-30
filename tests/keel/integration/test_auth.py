@@ -40,6 +40,15 @@ async def test_401_wrong_token(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_401_non_ascii_token(monkeypatch):
+    monkeypatch.setattr(settings, "integration_api_token", TOKEN)
+    # a non-ASCII bearer must be a clean 401, not a 500 from compare_digest
+    with pytest.raises(HTTPException) as exc:
+        await require_service_token(authorization="Bearer tökén")
+    assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_ok_correct_token(monkeypatch):
     monkeypatch.setattr(settings, "integration_api_token", TOKEN)
     assert await require_service_token(authorization=f"Bearer {TOKEN}") is None

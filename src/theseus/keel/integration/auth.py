@@ -26,7 +26,7 @@ async def require_service_token(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token"
         )
     presented = authorization[len(prefix):].strip()
-    if not hmac.compare_digest(presented, configured):
+    if not hmac.compare_digest(presented.encode(), configured.encode()):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid token"
         )
