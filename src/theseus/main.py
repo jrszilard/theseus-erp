@@ -7,7 +7,7 @@ from fastapi import FastAPI
 
 from theseus.api.dependencies import set_registry
 from theseus.api.middleware import RequestLoggingMiddleware
-from theseus.api.routes import assets, entities, health, maker, shipwright
+from theseus.api.routes import assets, entities, health, integration, maker, shipwright
 from theseus.api.security import SameOriginMiddleware, check_production_safety
 from theseus.bootstrap import build_registry
 from theseus.config import settings
@@ -55,6 +55,7 @@ def create_app() -> FastAPI:
     app.include_router(assets.router)
     app.include_router(maker.router)
     app.include_router(shipwright.router)
+    app.include_router(integration.router)
     app.include_router(web_routes.router)
     mount_static(app)
     return app
