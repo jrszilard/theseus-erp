@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     # Auth
     secret_key: str = "change-me-in-production"
     access_token_expire_minutes: int = 480
+    # Integration API (external storefronts). Empty = the integration API is disabled.
+    integration_api_token: str = ""
 
     # LLM (all optional — system works without AI)
     llm_provider: str = ""

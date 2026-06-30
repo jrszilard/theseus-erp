@@ -63,6 +63,9 @@ def check_production_safety(settings: Settings) -> None:
         value = getattr(settings, field)
         if placeholder in value.upper() and field not in offenders:
             offenders.append(f"{field} (unreplaced placeholder)")
+    token = settings.integration_api_token
+    if token and (placeholder in token.upper() or len(token) < 16):
+        offenders.append("integration_api_token (placeholder or too short)")
     if offenders:
         raise RuntimeError(
             "Refusing to start: default values for "
